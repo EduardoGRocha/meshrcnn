@@ -46,13 +46,14 @@ def register_pix3d(dataset_name, json_file, image_root, root="datasets"):
         dataset_name, lambda: load_pix3d_json(json_file, image_root, dataset_name)
     )
     things_ids = [k["id"] for k in get_pix3d_metadata()]
-    thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(things_ids)}
     if "bookcase" in dataset_name:
         thing_classes = ["bookcase"]
         thing_colors = [230, 25, 75]
+        thing_dataset_id_to_contiguous_id = {2: 0}
     else:
         thing_classes = [k["name"] for k in get_pix3d_metadata()]
         thing_colors = [k["color"] for k in get_pix3d_metadata()]
+        thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(things_ids)}
     json_file = os.path.join(root, json_file)
     image_root = os.path.join(root, image_root)
     metadata = {
