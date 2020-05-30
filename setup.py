@@ -9,5 +9,5 @@ setup(
     url="https://github.com/facebookresearch/meshrcnn",
     description="Code for Mesh R-CNN",
     packages=find_packages(exclude=("configs", "tests")),
-    install_requires=["torchvision>=0.4", "fvcore", "detectron2", "pytorch3d"],
+    install_requires=["torchvision>=0.4.1", "fvcore", "detectron2", "pytorch3d"],
 )

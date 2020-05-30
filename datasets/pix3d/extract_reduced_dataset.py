@@ -22,12 +22,30 @@ reduced_data["info"] = data["info"]
 reduced_data["categories"] = \
     [i for i in data["categories"] if i["name"] in CATEGORIES]
 
+category_ids_map = {}
+count = 1
+for category in reduced_data["categories"]:
+    category_ids_map[category["id"]] = count
+    count += 1
+
 category_ids = [i["id"] for i in reduced_data["categories"]]
 reduced_data["annotations"] = \
     [i for i in data["annotations"] if i["category_id"] in category_ids]
 
 image_ids = [i["image_id"] for i in reduced_data["annotations"]]
 reduced_data["images"] = [i for i in data["images"] if i["id"] in image_ids]
+
+def map_category_id(obj):
+    obj["category_id"] = category_ids_map[obj["category_id"]]
+    return obj
+
+def map_id(obj):
+    obj["id"] = category_ids_map[obj["id"]]
+    return obj
+
+
+reduced_data["annotations"] = [map_category_id(i) for i in reduced_data["annotations"]]
+reduced_data["categories"] = [map_id(i) for i in reduced_data["categories"]]
 
 print("Adding %i images..." % len(image_ids))
 
