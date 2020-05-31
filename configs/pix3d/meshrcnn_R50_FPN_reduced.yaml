@@ -53,9 +53,9 @@ DATASETS:
   TRAIN: ("pix3d_s1_train_bookcase",)
   TEST: ("pix3d_s1_test_bookcase",)
 SOLVER:
-  BASE_LR: 0.02
+  BASE_LR: 0.005
   WEIGHT_DECAY: 0.0001
-  STEPS: (1000, 2500)
+  STEPS: (1000, 2400)
   MAX_ITER: 2500
   WARMUP_ITERS: 100
   WARMUP_FACTOR: 0.1
