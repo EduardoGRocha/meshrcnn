@@ -38,6 +38,8 @@ SPLITS = {
     "pix3d_s2_test": ("pix3d", "pix3d/pix3d_s2_test.json"),
     "pix3d_s1_train_bookcase": ("pix3d", "pix3d/pix3d_s1_train_bookcase.json"),
     "pix3d_s1_test_bookcase": ("pix3d", "pix3d/pix3d_s1_test_bookcase.json"),
+    "pix3d_s1_train_bookcase_tool": ("pix3d", "pix3d/pix3d_s1_train_bookcase_tool.json"),
+    "pix3d_s1_test_bookcase_tool": ("pix3d", "pix3d/pix3d_s1_test_bookcase_tool.json"),
 }
 
 
