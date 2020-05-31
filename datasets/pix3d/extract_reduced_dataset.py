@@ -1,7 +1,7 @@
 import json
 
 
-CATEGORIES = ['bookcase']
+CATEGORIES = ['bookcase', 'tool']
 INPUT_FILE = 'pix3d_s1_train'
 OUTPUT_FILE = INPUT_FILE + "_" + "_".join(CATEGORIES)
 

@@ -14,7 +14,7 @@ MODEL:
   ROI_HEADS:
     NAME: "MeshRCNNROIHeads"
     BATCH_SIZE_PER_IMAGE: 64
-    NUM_CLASSES: 1 # Number of foreground classes
+    NUM_CLASSES: 2 # Number of foreground classes
     IOU_THRESHOLDS: [0.2, 0.5]
     IOU_LABELS: [-1, 0, 1]
   ROI_BOX_HEAD:
