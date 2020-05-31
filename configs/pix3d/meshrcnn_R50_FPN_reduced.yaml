@@ -50,8 +50,8 @@ MODEL:
     NORMALS_LOSS_WEIGHT: 0.1
     EDGE_LOSS_WEIGHT: 1.0
 DATASETS:
-  TRAIN: ("pix3d_s1_train_bookcase",)
-  TEST: ("pix3d_s1_test_bookcase",)
+  TRAIN: ("pix3d_s1_train_bookcase_tool",)
+  TEST: ("pix3d_s1_test_bookcase_tool",)
 SOLVER:
   BASE_LR: 0.005
   WEIGHT_DECAY: 0.0001
