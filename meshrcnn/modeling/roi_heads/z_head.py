@@ -104,6 +104,7 @@ def z_rcnn_loss(z_pred, instances, src_boxes, loss_weight=1.0, smooth_l1_beta=0.
     else:
         indices = torch.arange(total_num)
         gt_classes = cat(gt_classes, dim=0)
+        print(gt_classes)
         z_pred = z_pred[indices, gt_classes]
 
     loss_z_reg = smooth_l1_loss(z_pred, dz, smooth_l1_beta, reduction="sum")
