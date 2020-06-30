@@ -289,6 +289,26 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 else:
                     raise ValueError("No support for class specific predictions")
 
+            else:
+                # Dirty hack. If Voxels are turned off, then use OccNet
+                occnet_features = self.occnet_pooler(features, proposal_boxes)
+                occnet_logits = self.occnet_head(occnet_features)
+                loss_occnet, target_occnets = occnet_rcnn_loss(
+                    occnet_logits, proposals, loss_weight=self.occnet_loss_weight
+                )
+                losses.update({"loss_occnet": loss_occnet})
+                if self._vis:
+                    self._misc["target_occnets"] = target_occnets
+                if self.cls_agnostic_occnet:
+                    with torch.no_grad():
+                        vox_in = occnet_logits.sigmoid().squeeze(1)  # (N, V, V, V)
+                        init_mesh = cubify(vox_in, self.cubify_thresh)  # 1
+                else:
+                    raise ValueError("No support for class specific predictions")
+
+                # TODO what do I need to return?
+                return
+
             if self.mesh_on:
                 mesh_features = self.mesh_pooler(features, proposal_boxes)
                 if not self.voxel_on:

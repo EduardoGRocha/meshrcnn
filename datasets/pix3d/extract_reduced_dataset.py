@@ -2,7 +2,7 @@ import json
 
 
 CATEGORIES = ['bookcase', 'tool']
-INPUT_FILE = 'pix3d_s1_train'
+INPUT_FILE = 'pix3d_s1_test'
 OUTPUT_FILE = INPUT_FILE + "_" + "_".join(CATEGORIES)
 
 with open(INPUT_FILE + '.json', 'r') as input_file:
