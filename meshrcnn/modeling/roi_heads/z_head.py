@@ -77,7 +77,8 @@ def z_rcnn_loss(z_pred, instances, src_boxes, loss_weight=1.0, smooth_l1_beta=0.
     Returns:
         loss (Tensor): A scalar tensor containing the loss.
     """
-    cls_agnostic_z = z_pred.size(1) == 1
+    # cls_agnostic_z = z_pred.size(1) == 1
+    cls_agnostic_z = False
     total_num = z_pred.size(0)
 
     gt_classes = []
