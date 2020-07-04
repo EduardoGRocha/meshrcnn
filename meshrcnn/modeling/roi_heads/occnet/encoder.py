@@ -43,12 +43,13 @@ class BasicBlock(nn.Module):
 
 class MyResNet(nn.Module):
     def __init__(self, block, layers, num_classes=1000):
-        self.inplanes = 128
+        self.inplanes = 256
         super(MyResNet, self).__init__()
-        self.layer1 = self._make_layer(block, 256, layers[0], stride=2)
+        # self.layer1 = self._make_layer(block, 256, layers[0], stride=2)
         self.layer2 = self._make_layer(block, 512, layers[1], stride=2)
         # TODO 14x14 would work better here
-        self.avgpool = nn.AvgPool2d(6, stride=1)
+        # self.avgpool = nn.AvgPool2d(6, stride=1)
+        self.avgpool = nn.AvgPool2d(7, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         for m in self.modules():
@@ -76,7 +77,7 @@ class MyResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.layer1(x)
+        # x = self.layer1(x)
         x = self.layer2(x)
 
         x = self.avgpool(x)

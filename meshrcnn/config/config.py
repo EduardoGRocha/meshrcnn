@@ -85,4 +85,17 @@ def get_meshrcnn_cfg_defaults(cfg):
     # Init ico_sphere level (only for when voxel_on is false)
     cfg.MODEL.ROI_MESH_HEAD.ICO_SPHERE_LEVEL = -1
 
+    # ------------------------------------------------------------------------ #
+    # Occupancy Head
+    # ------------------------------------------------------------------------ #
+    cfg.MODEL.ROI_OCCNET_HEAD = CN()
+    cfg.MODEL.ROI_OCCNET_HEAD.NAME = "OccNetRCNNHead"
+    cfg.MODEL.ROI_OCCNET_HEAD.POOLER_RESOLUTION = 12
+    cfg.MODEL.ROI_OCCNET_HEAD.POOLER_SAMPLING_RATIO = 2
+    cfg.MODEL.ROI_OCCNET_HEAD.LOSS_WEIGHT = 3.0
+    # Type of pooling operation applied to the incoming feature map for each RoI
+    cfg.MODEL.ROI_OCCNET_HEAD.POOLER_TYPE = "ROIAlign"
+    cfg.MODEL.ROI_OCCNET_HEAD.CLS_AGNOSTIC_OCCUPANCY = False
+    cfg.MODEL.ROI_OCCNET_HEAD.SAMPLED_POINTS_PER_ITERATION = 2048
+
     return cfg

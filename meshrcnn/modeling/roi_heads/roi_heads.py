@@ -1,6 +1,8 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 from typing import Dict
 import torch
+import numpy as np
+
 from detectron2.layers import ShapeSpec, cat
 from detectron2.modeling import ROI_HEADS_REGISTRY
 from detectron2.modeling.poolers import ROIPooler
@@ -20,6 +22,13 @@ from meshrcnn.modeling.roi_heads.voxel_head import (
     voxel_rcnn_inference,
     voxel_rcnn_loss,
 )
+
+from meshrcnn.modeling.roi_heads.occnet_head import (
+    occnet_rcnn_loss,
+    occnet_rcnn_inference,
+    build_occ_head,
+)
+
 from meshrcnn.modeling.roi_heads.z_head import build_z_head, z_rcnn_inference, z_rcnn_loss
 from meshrcnn.utils import vis as vis_utils
 
@@ -35,6 +44,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
         self._init_z_head(cfg, input_shape)
         self._init_voxel_head(cfg, input_shape)
         self._init_mesh_head(cfg, input_shape)
+        self._init_occ_head(cfg, input_shape)
         # If MODEL.VIS_MINIBATCH is True we store minibatch targets
         # for visualization purposes
         self._vis = cfg.MODEL.VIS_MINIBATCH
@@ -130,6 +140,38 @@ class MeshRCNNROIHeads(StandardROIHeads):
             ),
         )
 
+    def _init_occ_head(self, cfg, input_shape):
+        # fmt: off
+        self.occ_on        = cfg.MODEL.OCC_ON
+        if not self.occ_on:
+            return
+        occ_pooler_resolution       = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_RESOLUTION
+        occ_pooler_scales           = tuple(1.0 / input_shape[k].stride for k in self.in_features)
+        occ_sampling_ratio          = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_SAMPLING_RATIO
+        occ_pooler_type             = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_TYPE
+        occ_points_per_iteration    = cfg.MODEL.ROI_OCCNET_HEAD.SAMPLED_POINTS_PER_ITERATION
+        # fmt: on
+
+        self.occ_loss_weight = cfg.MODEL.ROI_OCCNET_HEAD.LOSS_WEIGHT
+        self.cls_agnostic_occupancy = cfg.MODEL.ROI_OCCNET_HEAD.CLS_AGNOSTIC_OCCUPANCY
+        self.occ_points_per_iteration = occ_points_per_iteration
+
+        in_channels = [input_shape[f].channels for f in self.in_features][0]
+
+        self.occ_pooler = ROIPooler(
+            output_size=occ_pooler_resolution,
+            scales=occ_pooler_scales,
+            sampling_ratio=occ_sampling_ratio,
+            pooler_type=occ_pooler_type,
+        )
+
+        self.occ_head = build_occ_head(
+            cfg,
+            ShapeSpec(
+                channels=in_channels, height=occ_pooler_resolution, width=occ_pooler_resolution
+            ),
+        )
+
     def forward(self, images, features, proposals, targets=None):
         """
         See :class:`ROIHeads.forward`.
@@ -152,6 +194,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
             losses.update(self._forward_z(features, proposals))
             losses.update(self._forward_mask(features, proposals))
             losses.update(self._forward_shape(features, proposals))
+            losses.update(self._forward_occupancy(features, proposals))
             # print minibatch examples
             if self._vis:
                 vis_utils.visualize_minibatch(self._misc["images"], self._misc, self._vis_dir, True)
@@ -183,6 +226,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
         instances = self._forward_z(features, instances)
         instances = self._forward_mask(features, instances)
         instances = self._forward_shape(features, instances)
+        instances = self._forward_occupancy(features, instances)
         return instances
 
     def _forward_z(self, features, instances):
@@ -289,26 +333,6 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 else:
                     raise ValueError("No support for class specific predictions")
 
-            else:
-                # Dirty hack. If Voxels are turned off, then use OccNet
-                occnet_features = self.occnet_pooler(features, proposal_boxes)
-                occnet_logits = self.occnet_head(occnet_features)
-                loss_occnet, target_occnets = occnet_rcnn_loss(
-                    occnet_logits, proposals, loss_weight=self.occnet_loss_weight
-                )
-                losses.update({"loss_occnet": loss_occnet})
-                if self._vis:
-                    self._misc["target_occnets"] = target_occnets
-                if self.cls_agnostic_occnet:
-                    with torch.no_grad():
-                        vox_in = occnet_logits.sigmoid().squeeze(1)  # (N, V, V, V)
-                        init_mesh = cubify(vox_in, self.cubify_thresh)  # 1
-                else:
-                    raise ValueError("No support for class specific predictions")
-
-                # TODO what do I need to return?
-                return
-
             if self.mesh_on:
                 mesh_features = self.mesh_pooler(features, proposal_boxes)
                 if not self.voxel_on:
@@ -381,3 +405,38 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 mesh_rcnn_inference(init_mesh, instances)
 
             return instances
+
+    def _forward_occupancy(self, features, instances):
+        if not self.occ_on:
+            return {} if self.training else instances
+
+        features = [features[f] for f in self.in_features]
+
+        if self.training:
+            proposals, _ = select_foreground_proposals(instances, self.num_classes)
+            proposal_boxes = [x.proposal_boxes for x in proposals]
+
+            losses = {}
+            occ_features = self.occ_pooler(features, proposal_boxes)
+            # TODO is this correct?
+            # TODO hardcoded 100000
+            idx = np.random.randint(100000, size=self.occ_points_per_iteration)
+            sampled_points = [proposal.gt_points[:, :, idx, :] for proposal in proposals]
+            concatenated_points = torch.squeeze(torch.cat(sampled_points))
+            sampled_occupancies = [proposal.gt_occupancies[:, :, idx] for proposal in proposals]
+            concatenated_occupancies = torch.squeeze(torch.cat(sampled_occupancies))
+            occ_logits = self.occ_head(concatenated_points, occ_features).logits
+            loss_occ = occnet_rcnn_loss(
+            # loss_occ, target_occs = occnet_rcnn_loss(
+                occ_logits, concatenated_occupancies, loss_weight=self.occ_loss_weight
+            )
+            losses.update({"loss_occnet": loss_occ})
+            return losses
+        else:
+            pred_boxes = [x.pred_boxes for x in instances]
+
+            occ_features = self.occ_pooler(features, pred_boxes)
+            occ_logits = self.occ_head(occ_features)
+            occnet_rcnn_inference(occ_logits, instances)
+            return instances
+            # return self.mask_head(mask_features, instances)

@@ -21,35 +21,35 @@ __all__ = ["OccDatasetMapper"]
 logger = logging.getLogger(__name__)
 
 
-def annotations_to_instances(annos, image_size):
+def annotations_to_instances(annotations, image_size):
     """
     Create an :class:`Instances` object used by the models,
     from instance annotations in the dataset dict.
 
     Args:
-        annos (list[dict]): a list of annotations, one per instance.
+        annotations (list[dict]): a list of annotations, one per instance.
         image_size (tuple): height, width
 
     Returns:
         Instances: It will contains fields "gt_boxes", "gt_classes",
             "gt_masks", "gt_keypoints", if they can be obtained from `annos`.
     """
-    boxes = [BoxMode.convert(obj["bbox"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annos]
+    boxes = [BoxMode.convert(obj["bbox"], obj["bbox_mode"], BoxMode.XYXY_ABS) for obj in annotations]
     target = Instances(image_size)
     boxes = target.gt_boxes = Boxes(boxes)
     boxes.clip(image_size)
 
-    classes = [obj["category_id"] for obj in annos]
+    classes = [obj["category_id"] for obj in annotations]
     classes = torch.tensor(classes, dtype=torch.int64)
     target.gt_classes = classes
 
-    if len(annos) and "segmentation" in annos[0]:
-        masks = [obj["segmentation"] for obj in annos]
+    if len(annotations) and "segmentation" in annotations[0]:
+        masks = [obj["segmentation"] for obj in annotations]
         target.gt_masks = torch.stack(masks, dim=0)
 
     # camera
-    if len(annos) and "K" in annos[0]:
-        K = [torch.tensor(obj["K"]) for obj in annos]
+    if len(annotations) and "K" in annotations[0]:
+        K = [torch.tensor(obj["K"]) for obj in annotations]
         target.gt_K = torch.stack(K, dim=0)
 
     # if len(annos) and "voxel" in annos[0]:
@@ -60,9 +60,21 @@ def annotations_to_instances(annos, image_size):
     #     meshes = [obj["mesh"] for obj in annos]
     #     target.gt_meshes = MeshInstances(meshes)
 
-    if len(annos) and "dz" in annos[0]:
-        dz = [obj["dz"] for obj in annos]
+    if len(annotations) and "dz" in annotations[0]:
+        dz = [obj["dz"] for obj in annotations]
         target.gt_dz = torch.tensor(dz)
+
+    if len(annotations) and "pointcloud" in annotations[0]:
+        pointcloud = [obj["pointcloud"] for obj in annotations]
+        target.gt_pointcloud = torch.tensor(pointcloud)
+
+    if len(annotations) and "points" in annotations[0]:
+        points = [obj["points"] for obj in annotations]
+        target.gt_points = torch.tensor(points)
+
+    if len(annotations) and "occupancies" in annotations[0]:
+        occupancies = [obj["occupancies"] for obj in annotations]
+        target.gt_occupancies = torch.tensor(occupancies)
 
     return target
 
@@ -104,16 +116,20 @@ class OccDatasetMapper:
 
         assert dataset_names is not None
         # load unique occupancies all into memory
-        all_occ_models = {}
+        all_pointcloud_models = {}
+        all_points_models = {}
         for dataset_name in dataset_names:
             json_file = MetadataCatalog.get(dataset_name).json_file
             model_root = MetadataCatalog.get(dataset_name).image_root
             logger.info("Loading models from {}...".format(dataset_name))
-            dataset_occ_models = load_unique_pointclouds(json_file, model_root)
-            all_occ_models.update(dataset_occ_models)
-            logger.info("Unique objects loaded: {}".format(len(dataset_occ_models)))
+            dataset_pointcloud_models = load_unique_pointclouds(json_file, model_root)
+            dataset_points_models = load_unique_points(json_file, model_root)
+            all_pointcloud_models.update(dataset_pointcloud_models)
+            all_points_models.update(dataset_points_models)
+            logger.info("Unique objects loaded: {}".format(len(dataset_pointcloud_models)))
 
-        self._all_occ_models = all_occ_models
+        self._all_pointcloud_models = all_pointcloud_models
+        self._all_points_models = all_points_models
 
     def __call__(self, dataset_dict):
         """
@@ -130,22 +146,26 @@ class OccDatasetMapper:
                 3. Prepare the annotations to :class:`Instances`
         """
         # get 3D models for each annotations and remove 3D mesh models from image dict
-        occupancy_models = []
+        pointcloud_models = []
+        points_models = []
+        occupancies_models = []
         if "annotations" in dataset_dict:
             for annotation in dataset_dict["annotations"]:
-                pointcloud_dict = self._all_occ_models[annotation["pointcloud"]][None]
-                occupancy_models.append(
-                    [
-                        (pointcloud_dict).copy(),
-                        # self._all_occ_models[annnotation["mesh"]][1].clone(),
-                    ]
-                )
+                pointcloud_dict = self._all_pointcloud_models[annotation["pointcloud"]][None]
+                pointcloud_models.append([(pointcloud_dict).copy()])
+                points_dict = self._all_points_models[annotation["points"]][None]
+                points_models.append([(points_dict).copy()])
+                occupancies_dict = self._all_points_models[annotation["points"]]["occupancies"]
+                occupancies_models.append([(occupancies_dict).copy()])
 
         dataset_dict = {key: value for key, value in dataset_dict.items() if key != "mesh_models"}
+        # TODO WTF?
         dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
         if "annotations" in dataset_dict:
             for i, annotation in enumerate(dataset_dict["annotations"]):
-                annotation["occupancy"] = occupancy_models[i]
+                annotation["pointcloud"] = pointcloud_models[i]
+                annotation["points"] = points_models[i]
+                annotation["occupancies"] = occupancies_models[i]
 
         image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
         utils.check_image_size(dataset_dict, image)
@@ -239,6 +259,20 @@ class OccDatasetMapper:
         else:
             annotation.pop("pointcloud", None)
 
+        if self.occ_on and "points" in annotation:
+            annotation["points"] = self._process_points(
+                annotation["points"], transforms, R=annotation["R"], t=annotation["t"]
+            )
+        else:
+            annotation.pop("points", None)
+
+        if self.occ_on and "occupancies" in annotation:
+            annotation["occupancies"] = self._process_occupancies(
+                annotation["occupancies"], transforms, R=annotation["R"], t=annotation["t"]
+            )
+        else:
+            annotation.pop("occupancies", None)
+
         return annotation
 
     def _process_dz(self, mesh, transforms, focal_length=1.0, R=None, t=None):
@@ -316,27 +350,16 @@ class OccDatasetMapper:
         return verts, faces
 
     def _process_pointcloud(self, pointcloud, transforms, R=None, t=None):
-        # clone mesh
-        # verts, faces = pointcloud
-        # transform vertices to camera coordinate system
-        # verts = shape_utils.transform_verts(verts, R, t)
-
-        # TODO I think there's no transformation for pointclouds...
-        # assert all(
-        #     isinstance(t, (T.HFlipTransform, T.NoOpTransform, T.ResizeTransform))
-        #     for t in transforms.transforms
-        # )
-        # for t in transforms.transforms:
-        #     if isinstance(t, T.HFlipTransform):
-        #         verts[:, 0] = -verts[:, 0]
-        #     elif isinstance(t, T.ResizeTransform):
-        #         verts = t.apply_coords(verts)
-        #     elif isinstance(t, T.NoOpTransform):
-        #         pass
-        #     else:
-        #         raise ValueError("Transform {} not recognized".format(t))
-        # return verts, faces
+        # TODO pointclouds probably don't need any extra transformation
         return pointcloud
+
+    def _process_points(self, points, transforms, R=None, t=None):
+        # TODO points probably don't need any extra transformation
+        return points
+
+    def _process_occupancies(self, occupancies, transforms, R=None, t=None):
+        # TODO occupancies probably don't need any extra transformation
+        return occupancies
 
 
 def load_unique_pointclouds(json_file, model_root):
@@ -350,15 +373,42 @@ def load_unique_pointclouds(json_file, model_root):
             unique_occupancies.append(model_type)
 
     # read unique occupancies
-    object_occupancies = {}
+    object_pointclouds = {}
     for model in unique_occupancies:
-        # occupancy = load_obj(os.path.join(model_root, model))
-        # object_occupancies[model] = [occupancy[0], occupancy[1].verts_idx]
         pointcloud_dict = np.load(os.path.join(model_root, model))
         occupancy = {
             None: pointcloud_dict['points'].astype(np.float32),
             'normals': pointcloud_dict['normals'].astype(np.float32)
         }
-        object_occupancies[model] = occupancy
+        object_pointclouds[model] = occupancy
 
-    return object_occupancies
+    return object_pointclouds
+
+
+def load_unique_points(json_file, model_root):
+    with open(json_file, "r") as f:
+        annotations = json.load(f)["annotations"]
+    # find unique models
+    unique_occupancies = []
+    for obj in annotations:
+        model_type = obj["points"]
+        if model_type not in unique_occupancies:
+            unique_occupancies.append(model_type)
+
+    # read unique occupancies
+    model_to_points = {}
+    for model in unique_occupancies:
+        points_dict = np.load(os.path.join(model_root, model))
+        points = points_dict['points'].astype(np.float32)
+        packed_occupancies = points_dict['occupancies']
+        # unpack bits
+        unpacked_occupancies = np.unpackbits(packed_occupancies)[:points.shape[0]]
+        occupancies = unpacked_occupancies.astype(np.float32)
+
+        model_points = {
+            None: points,
+            'occupancies': occupancies
+        }
+        model_to_points[model] = model_points
+
+    return model_to_points
