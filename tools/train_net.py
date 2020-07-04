@@ -17,7 +17,7 @@ from detectron2.utils.logger import setup_logger
 # required so that .register() calls are executed in module scope
 import meshrcnn.modeling  # noqa
 from meshrcnn.config import get_meshrcnn_cfg_defaults
-from meshrcnn.data import MeshRCNNMapper
+from meshrcnn.data import MeshRCNNMapper, OccDatasetMapper
 from meshrcnn.evaluation import Pix3DEvaluator
 
 
@@ -32,16 +32,27 @@ class Trainer(DefaultTrainer):
 
     @classmethod
     def build_test_loader(cls, cfg, dataset_name):
-        return build_detection_test_loader(
-            cfg, dataset_name, mapper=MeshRCNNMapper(cfg, False, dataset_names=(dataset_name,))
-        )
+        if "shapenet" in dataset_name:
+
+            return build_detection_test_loader(
+                cfg, dataset_name, mapper=OccDatasetMapper(cfg, False, dataset_names=(dataset_name,))
+            )
+        else:
+            return build_detection_test_loader(
+                cfg, dataset_name, mapper=MeshRCNNMapper(cfg, False, dataset_names=(dataset_name,))
+            )
 
     @classmethod
     def build_train_loader(cls, cfg):
         dataset_names = cfg.DATASETS.TRAIN
-        return build_detection_train_loader(
-            cfg, mapper=MeshRCNNMapper(cfg, True, dataset_names=dataset_names)
-        )
+        if "shapenet" in dataset_names[0]:
+            return build_detection_train_loader(
+                cfg, mapper=OccDatasetMapper(cfg, True, dataset_names=dataset_names)
+            )
+        else:
+            return build_detection_train_loader(
+                cfg, mapper=MeshRCNNMapper(cfg, True, dataset_names=dataset_names)
+            )
 
     @classmethod
     def test(cls, cfg, model):

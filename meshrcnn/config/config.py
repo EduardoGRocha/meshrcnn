@@ -13,6 +13,7 @@ def get_meshrcnn_cfg_defaults(cfg):
     cfg.MODEL.VOXEL_ON = False
     cfg.MODEL.MESH_ON = False
     cfg.MODEL.ZPRED_ON = False
+    cfg.MODEL.OCC_ON = False
     cfg.MODEL.VIS_MINIBATCH = False  # visualize minibatches
 
     # aspect ratio grouping has no difference in performance

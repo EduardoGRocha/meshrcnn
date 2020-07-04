@@ -13,7 +13,7 @@ exist in "./datasets/".
 import os
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
-from meshrcnn.data.datasets import load_pix3d_json
+from meshrcnn.data.datasets import load_pix3d_json, load_shapenet_json
 
 
 def get_pix3d_metadata():
@@ -31,7 +31,15 @@ def get_pix3d_metadata():
     return meta
 
 
-SPLITS = {
+def get_shapenet_metadata():
+    meta = [
+        {"name": "telephone", "color": [255, 255, 25], "id": 1},
+    ]
+
+    return meta
+
+
+PIX3D_SPLITS = {
     "pix3d_s1_train": ("pix3d", "pix3d/pix3d_s1_train.json"),
     "pix3d_s1_test": ("pix3d", "pix3d/pix3d_s1_test.json"),
     "pix3d_s2_train": ("pix3d", "pix3d/pix3d_s2_train.json"),
@@ -40,6 +48,10 @@ SPLITS = {
     "pix3d_s1_test_bookcase": ("pix3d", "pix3d/pix3d_s1_test_bookcase.json"),
     "pix3d_s1_train_bookcase_tool": ("pix3d", "pix3d/pix3d_s1_train_bookcase_tool.json"),
     "pix3d_s1_test_bookcase_tool": ("pix3d", "pix3d/pix3d_s1_test_bookcase_tool.json"),
+}
+
+SHAPENET_SPLITS = {
+    "shapenet_phones": ("ShapeNetPhonesNew", "ShapeNetPhonesNew/shapenet_phones.json"),
 }
 
 
@@ -72,5 +84,30 @@ def register_pix3d(dataset_name, json_file, image_root, root="datasets"):
     )
 
 
-for key, (data_root, anno_file) in SPLITS.items():
+def register_shapenet(dataset_name, json_file, image_root, root="datasets"):
+    DatasetCatalog.register(
+        dataset_name, lambda: load_shapenet_json(json_file, image_root, dataset_name)
+    )
+    things_ids = [k["id"] for k in get_shapenet_metadata()]
+    thing_classes = [k["name"] for k in get_shapenet_metadata()]
+    thing_colors = [k["color"] for k in get_shapenet_metadata()]
+
+    thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(things_ids)}
+    json_file = os.path.join(root, json_file)
+    image_root = os.path.join(root, image_root)
+    metadata = {
+        "thing_classes": thing_classes,
+        "thing_dataset_id_to_contiguous_id": thing_dataset_id_to_contiguous_id,
+        "thing_colors": thing_colors,
+    }
+
+    MetadataCatalog.get(dataset_name).set(
+        json_file=json_file, image_root=image_root, evaluator_type="shapenet", **metadata
+    )
+
+
+for key, (data_root, anno_file) in PIX3D_SPLITS.items():
     register_pix3d(key, anno_file, data_root)
+
+for key, (data_root, anno_file) in SHAPENET_SPLITS.items():
+    register_shapenet(key, anno_file, data_root)

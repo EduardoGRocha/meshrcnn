@@ -3,3 +3,4 @@
 from . import datasets  # isort:skip
 
 from .meshrcnn_transforms import MeshRCNNMapper
+from .occ_dataset_transforms import OccDatasetMapper
