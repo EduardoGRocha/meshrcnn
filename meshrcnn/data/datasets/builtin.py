@@ -51,7 +51,7 @@ PIX3D_SPLITS = {
 }
 
 SHAPENET_SPLITS = {
-    "shapenet_phones": ("ShapeNetPhonesNew", "ShapeNetPhonesNew/shapenet_phones.json"),
+    "shapenet_phones": ("", "ShapeNetPhonesNew5/shapenet_phones.json"),
 }
 
 
