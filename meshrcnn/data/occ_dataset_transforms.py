@@ -64,6 +64,10 @@ def annotations_to_instances(annotations, image_size):
         dz = [obj["dz"] for obj in annotations]
         target.gt_dz = torch.tensor(dz)
 
+    # if len(annotations) and "pointcloud_name" in annotations[0]:
+    #     pointcloud_name = [obj["pointcloud_name"] for obj in annotations]
+    #     target.gt_pointcloud_name = pointcloud_name
+
     if len(annotations) and "pointcloud" in annotations[0]:
         pointcloud = [obj["pointcloud"] for obj in annotations]
         target.gt_pointcloud = torch.tensor(pointcloud)
@@ -112,7 +116,8 @@ class OccDatasetMapper:
                 else cfg.DATASETS.PRECOMPUTED_PROPOSAL_TOPK_TEST
             )
 
-        self.is_train = is_train
+        # self.is_train = is_train
+        self.is_train = True
 
         assert dataset_names is not None
         # load unique occupancies all into memory
@@ -147,12 +152,14 @@ class OccDatasetMapper:
         """
         # get 3D models for each annotations and remove 3D mesh models from image dict
         pointcloud_models = []
+        pointcloud_models_name = []
         points_models = []
         occupancies_models = []
         if "annotations" in dataset_dict:
             for annotation in dataset_dict["annotations"]:
                 pointcloud_dict = self._all_pointcloud_models[annotation["pointcloud"]][None]
                 pointcloud_models.append([(pointcloud_dict).copy()])
+                pointcloud_models_name.append(annotation["pointcloud"])
                 points_dict = self._all_points_models[annotation["points"]][None]
                 points_models.append([(points_dict).copy()])
                 occupancies_dict = self._all_points_models[annotation["points"]]["occupancies"]
@@ -163,6 +170,8 @@ class OccDatasetMapper:
         dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
         if "annotations" in dataset_dict:
             for i, annotation in enumerate(dataset_dict["annotations"]):
+                # For checking the name of the image later on
+                annotation["pointcloud_name"] = pointcloud_models_name[i]
                 annotation["pointcloud"] = pointcloud_models[i]
                 annotation["points"] = points_models[i]
                 annotation["occupancies"] = occupancies_models[i]

@@ -18,7 +18,8 @@ from detectron2.utils.logger import setup_logger
 import meshrcnn.modeling  # noqa
 from meshrcnn.config import get_meshrcnn_cfg_defaults
 from meshrcnn.data import MeshRCNNMapper, OccDatasetMapper
-from meshrcnn.evaluation import Pix3DEvaluator
+from meshrcnn.evaluation import Pix3DEvaluator, ShapeNetEvaluator
+from meshrcnn.evaluation.loss_eval_hook import LossEvalHook
 
 
 class Trainer(DefaultTrainer):
@@ -27,6 +28,9 @@ class Trainer(DefaultTrainer):
         evaluator_type = MetadataCatalog.get(dataset_name).evaluator_type
         if evaluator_type == "pix3d":
             return Pix3DEvaluator(dataset_name, cfg, True)
+        # TODO shapenet -> occhead
+        elif evaluator_type == "shapenet":
+            return ShapeNetEvaluator(dataset_name, cfg, True)
         else:
             raise ValueError("The evaluator type is wrong")
 
@@ -77,6 +81,22 @@ class Trainer(DefaultTrainer):
                     results_i
                 )
         return results
+
+    # def build_hooks(self):
+    #     hooks = super().build_hooks()
+    #     hooks.insert(-1, LossEvalHook(
+    #         # self.cfg.TEST.EVAL_PERIOD,
+    #         1,
+    #         self.model,
+    #         build_detection_test_loader(
+    #             self.cfg,
+    #             self.cfg.DATASETS.TEST[0],
+    #             OccDatasetMapper(
+    #                 self.cfg, True,
+    #                 dataset_names=self.cfg.DATASETS.TEST)
+    #         )
+    #     ))
+    #     return hooks
 
 
 def setup(args):

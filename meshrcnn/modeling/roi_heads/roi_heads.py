@@ -178,11 +178,13 @@ class MeshRCNNROIHeads(StandardROIHeads):
         """
         if self._vis:
             self._misc["images"] = images
-        del images
+        # del images
 
         if self.training:
             proposals = self.label_and_sample_proposals(proposals, targets)
-        del targets
+        # elif targets is not None:
+        #     proposals_inference = self.label_and_sample_proposals(proposals, targets)
+        # del targets
 
         if self._vis:
             self._misc["proposals"] = proposals
@@ -204,8 +206,18 @@ class MeshRCNNROIHeads(StandardROIHeads):
             pred_instances = self._forward_box(features, proposals)
             # During inference cascaded prediction is used: the mask and keypoints heads are only
             # applied to the top scoring box detections.
-            pred_instances = self.forward_with_given_boxes(features, pred_instances)
+            pred_instances = self._forward_with_given_boxes(features, pred_instances, targets)
             return pred_instances, {}
+
+    def _forward_with_given_boxes(self, features, instances, targets):
+        assert not self.training
+        assert instances[0].has("pred_boxes") and instances[0].has("pred_classes")
+
+        instances = self._forward_z(features, instances)
+        instances = self._forward_mask(features, instances)
+        instances = self._forward_shape(features, instances)
+        instances = self._forward_occupancy(features, instances, targets)
+        return instances
 
     def forward_with_given_boxes(self, features, instances):
         """
@@ -406,7 +418,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
             return instances
 
-    def _forward_occupancy(self, features, instances):
+    def _forward_occupancy(self, features, instances, targets=None):
         if not self.occ_on:
             return {} if self.training else instances
 
@@ -418,7 +430,6 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
             losses = {}
             occ_features = self.occ_pooler(features, proposal_boxes)
-            # TODO is this correct?
             # TODO hardcoded 100000
             idx = np.random.randint(100000, size=self.occ_points_per_iteration)
             sampled_points = [proposal.gt_points[:, :, idx, :] for proposal in proposals]
@@ -427,16 +438,46 @@ class MeshRCNNROIHeads(StandardROIHeads):
             concatenated_occupancies = torch.squeeze(torch.cat(sampled_occupancies))
             occ_logits = self.occ_head(concatenated_points, occ_features).logits
             loss_occ = occnet_rcnn_loss(
-            # loss_occ, target_occs = occnet_rcnn_loss(
                 occ_logits, concatenated_occupancies, loss_weight=self.occ_loss_weight
             )
             losses.update({"loss_occnet": loss_occ})
             return losses
         else:
             pred_boxes = [x.pred_boxes for x in instances]
+            points = []
+            occupancies = []
+            # pred_boxes = [pred_boxes[1]]
+            # targets = [targets[1]]
+            # features = [features[3]]
+            # for pred_box, target in zip(pred_boxes, targets):
+            #     points += [target.gt_points]*len(pred_box)
+            #     occupancies += [target.gt_occupancies]*len(pred_box)
+            points = [targets[0].gt_points]
+            occupancies = [targets[0].gt_occupancies]
+            # points = torch.squeeze(torch.cat(points))
+            # occupancies = torch.squeeze(torch.cat(occupancies))
+            points = torch.cat(points)[0]
+            occupancies = torch.cat(occupancies)[0]
 
+            # pred_boxes[0].tensor[1] = pred_boxes[0].tensor[0]
             occ_features = self.occ_pooler(features, pred_boxes)
-            occ_logits = self.occ_head(occ_features)
-            occnet_rcnn_inference(occ_logits, instances)
+            # occ_features[1] = occ_features[0]
+            batch_size = occ_features.size(0)
+            occ_latent = self.occ_head.network.encode_inputs(occ_features)
+            # TODO setting sample to True
+            z = self.occ_head.network.get_z_from_prior((batch_size,), sample=True)
+
+            logits = self.occ_head(points, occ_features[0:1,:,:,:]).logits
+            loss_occ = occnet_rcnn_loss(
+                logits, occupancies, loss_weight=self.occ_loss_weight
+            )
+            log_sig = logits.sigmoid()
+            log_sig[log_sig < 0.5] = 0
+            log_sig[log_sig >= 0.5] = 1
+            occ_example = (logits.sigmoid() >= 0.5)
+            occ_gt = (occupancies >= 0.5)
+            union = (occ_example | occ_gt)
+            intersect = (occ_gt & occ_example)
+            iou = intersect.sum().double() / union.sum().double()
+            occnet_rcnn_inference(pred_boxes, instances)
             return instances
-            # return self.mask_head(mask_features, instances)
