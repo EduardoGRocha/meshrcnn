@@ -21,7 +21,7 @@ from pytorch3d.utils import ico_sphere
 import meshrcnn.utils.VOCap as VOCap
 from meshrcnn.utils import shape as shape_utils
 from meshrcnn.utils import vis as vis_utils
-from meshrcnn.utils.metrics import compare_meshes
+from meshrcnn.utils.metrics import compare_meshes, compute_iou
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class ShapeNetEvaluator(DatasetEvaluator):
         self._metadata = MetadataCatalog.get(dataset_name)
         self._coco_api = COCO(self._metadata.json_file)
 
-        # TODO which metrics do we need?
+        # TODO which metrics do we need? -> IOU
         self._filter_iou = 0.3
 
         # load unique obj files
@@ -67,6 +67,7 @@ class ShapeNetEvaluator(DatasetEvaluator):
         json_file = MetadataCatalog.get(dataset_name).json_file
         model_root = MetadataCatalog.get(dataset_name).image_root
         # self._mesh_models = load_unique_meshes(json_file, model_root)
+        # TODO We only need the pointcloud for evaluation generated meshes -> of no use here
         self._pointcloud_models = load_unique_pointclouds(json_file, model_root)
         self._points_models = load_unique_points(json_file, model_root)
         logger.info("Unique objects loaded: {}".format(len(self._pointcloud_models)))
@@ -147,25 +148,112 @@ class ShapeNetEvaluator(DatasetEvaluator):
 
     def _eval_predictions(self):
         """
-        Evaluate mesh rcnn predictions.
+        Evaluate predictions.
         """
 
-        if "segm" in self._tasks and "mesh" in self._tasks:
-            results = evaluate_for_pix3d(
+        if "occ" in self._tasks and "bbox" in self._tasks:
+            results = evaluate_for_shapenet(
                 self._predictions,
                 self._coco_api,
                 self._metadata,
                 self._filter_iou,
-                mesh_models=self._mesh_models,
-                device=self._device,
+                points_models=self._points_models,
+                device=self._device
             )
 
-            # print results
-            self._logger.info("Box AP %.5f" % (results["box_ap@%.1f" % 0.5]))
-            self._logger.info("Mask AP %.5f" % (results["mask_ap@%.1f" % 0.5]))
-            self._logger.info("Mesh AP %.5f" % (results["mesh_ap@%.1f" % 0.5]))
-            self._results["shape"] = results
+            # save results
+            #TODO
 
+def evaluate_for_shapenet(
+    predictions,
+    dataset,
+    metadata,
+    filter_iou,
+    iou_thresh=0.5,
+    occ_iou_tresh=0.3,
+    device=None,
+    points_models=None
+):
+
+    dict_list = []
+    if device is None:
+        device = torch.device("cpu")
+
+    # classes
+    cat_ids = sorted(dataset.getCatIds())
+    reverse_id_mapping = {v: k for k, v in metadata.thing_dataset_id_to_contiguous_id.items()}
+
+    for prediction in predictions:
+
+        if "instances" not in prediction:
+            continue
+
+        num_img_preds = len(prediction["instances"])
+        if num_img_preds == 0:
+            continue
+
+        original_id = prediction["image_id"]
+        scores = prediction["instances"].scores
+        boxes = prediction["instances"].pred_boxes.to(device)
+        labels = prediction["instances"].pred_classes
+        occ = prediction["instances"].pred_occupancies
+
+        # ground truth
+        gt_ann_ids = dataset.getAnnIds(imgIds=[original_id])
+        assert len(gt_ann_ids) == 1  # note that pix3d has one annotation per image
+        gt_anns = dataset.loadAnns(gt_ann_ids)[0]
+        assert gt_anns["image_id"] == original_id
+
+        # get original ground truth box, label & occupancies
+        gt_box = np.array(gt_anns["bbox"]).reshape(-1, 4)  # xywh from coco
+        gt_box = BoxMode.convert(gt_box, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
+        gt_label = gt_anns["category_id"]
+        faux_gt_targets = Boxes(torch.tensor(gt_box, dtype=torch.float32, device=device))
+
+        # Key for occupancies is like: 'occupancies/telephone/cfdd44745ba101bc714ce1441b585593/points.npz'
+        if points_models is not None:
+            modeltype = gt_anns["points"]
+            gt_occupancies = points_models[modeltype]["occupancies"]
+
+        # eval bbox IOU
+        boxiou = pairwise_iou(boxes, faux_gt_targets)
+
+        # filter bboxes which don't have enough overlap with gt box
+        valid_pred_ids = boxiou > filter_iou
+
+        # sort predictions in descending order
+        scores_sorted, idx_sorted = torch.sort(scores, descending=True)
+
+        for pred_id in range(num_img_preds):
+            # remember we only evaluate the preds that have overlap more than
+            # iou_filter with the ground truth prediction
+            if valid_pred_ids[idx_sorted[pred_id], 0] == 0:
+                continue
+
+            pred_dict = {
+                "id, pred_id": (original_id, pred_id)
+            }
+            dict_list.append(pred_dict)
+
+            # box
+            pred_label = reverse_id_mapping[labels[idx_sorted[pred_id]].item()]
+            pred_biou = boxiou[idx_sorted[pred_id]].item()
+            pred_score = scores[idx_sorted[pred_id]].view(1).to(device)
+
+            # occupancy IOU
+            pred_occ = occ[idx_sorted[pred_id]]
+            pred_occ = (pred_occ >= occ_iou_tresh).cpu().numpy()
+            gt_occ = (gt_occupancies >= 0.5)
+            iou = compute_iou(pred_occ, gt_occ)
+
+            # add to dict
+            pred_dict['pred_label'] = pred_label
+            pred_dict['pred_biou'] = pred_biou
+            pred_dict['pred_score'] = pred_score.cpu().numpy()
+            pred_dict['gt_label'] = gt_label
+            pred_dict['iou'] = iou
+
+    return dict_list
 
 def evaluate_for_pix3d(
     predictions,

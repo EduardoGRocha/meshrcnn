@@ -384,7 +384,7 @@ def load_unique_pointclouds(json_file, model_root):
     # read unique occupancies
     object_pointclouds = {}
     for model in unique_occupancies:
-        pointcloud_dict = np.load(os.path.join(model_root, model))
+        pointcloud_dict = np.load(os.path.join(model_root,  model))
         occupancy = {
             None: pointcloud_dict['points'].astype(np.float32),
             'normals': pointcloud_dict['normals'].astype(np.float32)

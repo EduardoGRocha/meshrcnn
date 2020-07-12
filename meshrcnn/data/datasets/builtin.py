@@ -51,9 +51,9 @@ PIX3D_SPLITS = {
 }
 
 SHAPENET_SPLITS = {
-    "shapenet_phones_train": ("", "ShapeNetPhonesNew120/shapenet_phones_train.json"),
-    "shapenet_phones_test": ("", "ShapeNetPhonesNew120/shapenet_phones_test.json"),
-    "shapenet_phones": ("", "ShapeNetPhonesNew5/shapenet_phones.json"),
+    "shapenet_phones_train": ("ShapeNetPhonesNew120", "ShapeNetPhonesNew120/shapenet_phones_train.json"),
+    "shapenet_phones_test": ("ShapeNetPhonesNew120", "ShapeNetPhonesNew120/shapenet_phones_test.json"),
+    "shapenet_phones": ("ShapeNetPhonesNew", "ShapeNetPhonesNew/shapenet_phones.json"),
 }
 
 
@@ -106,6 +106,10 @@ def register_shapenet(dataset_name, json_file, image_root, root="datasets"):
     MetadataCatalog.get(dataset_name).set(
         json_file=json_file, image_root=image_root, evaluator_type="shapenet", **metadata
     )
+
+#DatasetCatalog.clear()
+# print(MetadataCatalog.list())
+print(MetadataCatalog.get('shapenet_phones'))
 
 
 for key, (data_root, anno_file) in PIX3D_SPLITS.items():
