@@ -484,7 +484,8 @@ class MeshRCNNROIHeads(StandardROIHeads):
             return instances
             '''
 
-            #TODO: change to all boxes (remove [0])
+            # TODO: change to all boxes (not possible due to gpu constraints)
+            # pred_boxes = [x.pred_boxes for x in instances]
             pred_boxes = [x.pred_boxes[0] for x in instances]
             occ_features = self.occ_pooler(features, pred_boxes)
 
@@ -495,11 +496,21 @@ class MeshRCNNROIHeads(StandardROIHeads):
             occupancies_tensor = torch.squeeze(torch.cat(occupancies, dim=0), 1)
 
             # feed gt_points and features through occ_head
-            #TODO: 'blow up' points to fit occ_features dim
+            # TODO: 'blow up' points to fit occ_features dim
+            # something like:
+            # x = []
+            # n_batch = len(instances)
+            # n_instance = [len(x) for x in instances]
+            # for i in range(n_batch):
+            #     x.extend([torch.squeeze(points[i], 1) for j in range(n_instance[i])])
+            # points_tensor = torch.cat(x, dim=0)
+            # assert points_tensor.shape[0] == occ_features.shape[0]
+
             logits = self.occ_head(points_tensor, occ_features).logits
 
-            # occ net inference; only for one box per instance
-            #TODO: don't filter instances
+            # occ net inference;
+            # TODO: don't filter instances
+            # occnet_rcnn_inference(logits, instances)
             filtered_instances = [instance[0] for instance in instances]
             occnet_rcnn_inference(logits, filtered_instances)
 
