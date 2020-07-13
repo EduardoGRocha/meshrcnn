@@ -31,6 +31,7 @@ from meshrcnn.modeling.roi_heads.occnet_head import (
 
 from meshrcnn.modeling.roi_heads.z_head import build_z_head, z_rcnn_inference, z_rcnn_loss
 from meshrcnn.utils import vis as vis_utils
+from meshrcnn.generation.generator import Generator3D
 
 
 @ROI_HEADS_REGISTRY.register()
@@ -57,9 +58,9 @@ class MeshRCNNROIHeads(StandardROIHeads):
         if not self.zpred_on:
             return
         z_pooler_resolution = cfg.MODEL.ROI_Z_HEAD.POOLER_RESOLUTION
-        z_pooler_scales     = tuple(1.0 / input_shape[k].stride for k in self.in_features)
-        z_sampling_ratio    = cfg.MODEL.ROI_Z_HEAD.POOLER_SAMPLING_RATIO
-        z_pooler_type       = cfg.MODEL.ROI_Z_HEAD.POOLER_TYPE
+        z_pooler_scales = tuple(1.0 / input_shape[k].stride for k in self.in_features)
+        z_sampling_ratio = cfg.MODEL.ROI_Z_HEAD.POOLER_SAMPLING_RATIO
+        z_pooler_type = cfg.MODEL.ROI_Z_HEAD.POOLER_TYPE
         # fmt: on
 
         self.z_loss_weight = cfg.MODEL.ROI_Z_HEAD.Z_REG_WEIGHT
@@ -80,13 +81,13 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
     def _init_voxel_head(self, cfg, input_shape):
         # fmt: off
-        self.voxel_on       = cfg.MODEL.VOXEL_ON
+        self.voxel_on = cfg.MODEL.VOXEL_ON
         if not self.voxel_on:
             return
         voxel_pooler_resolution = cfg.MODEL.ROI_VOXEL_HEAD.POOLER_RESOLUTION
-        voxel_pooler_scales     = tuple(1.0 / input_shape[k].stride for k in self.in_features)
-        voxel_sampling_ratio    = cfg.MODEL.ROI_VOXEL_HEAD.POOLER_SAMPLING_RATIO
-        voxel_pooler_type       = cfg.MODEL.ROI_VOXEL_HEAD.POOLER_TYPE
+        voxel_pooler_scales = tuple(1.0 / input_shape[k].stride for k in self.in_features)
+        voxel_sampling_ratio = cfg.MODEL.ROI_VOXEL_HEAD.POOLER_SAMPLING_RATIO
+        voxel_pooler_type = cfg.MODEL.ROI_VOXEL_HEAD.POOLER_TYPE
         # fmt: on
 
         self.voxel_loss_weight = cfg.MODEL.ROI_VOXEL_HEAD.LOSS_WEIGHT
@@ -108,13 +109,13 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
     def _init_mesh_head(self, cfg, input_shape):
         # fmt: off
-        self.mesh_on        = cfg.MODEL.MESH_ON
+        self.mesh_on = cfg.MODEL.MESH_ON
         if not self.mesh_on:
             return
-        mesh_pooler_resolution  = cfg.MODEL.ROI_MESH_HEAD.POOLER_RESOLUTION
-        mesh_pooler_scales      = tuple(1.0 / input_shape[k].stride for k in self.in_features)
-        mesh_sampling_ratio     = cfg.MODEL.ROI_MESH_HEAD.POOLER_SAMPLING_RATIO
-        mesh_pooler_type        = cfg.MODEL.ROI_MESH_HEAD.POOLER_TYPE
+        mesh_pooler_resolution = cfg.MODEL.ROI_MESH_HEAD.POOLER_RESOLUTION
+        mesh_pooler_scales = tuple(1.0 / input_shape[k].stride for k in self.in_features)
+        mesh_sampling_ratio = cfg.MODEL.ROI_MESH_HEAD.POOLER_SAMPLING_RATIO
+        mesh_pooler_type = cfg.MODEL.ROI_MESH_HEAD.POOLER_TYPE
         # fmt: on
 
         self.chamfer_loss_weight = cfg.MODEL.ROI_MESH_HEAD.CHAMFER_LOSS_WEIGHT
@@ -142,14 +143,14 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
     def _init_occ_head(self, cfg, input_shape):
         # fmt: off
-        self.occ_on        = cfg.MODEL.OCC_ON
+        self.occ_on = cfg.MODEL.OCC_ON
         if not self.occ_on:
             return
-        occ_pooler_resolution       = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_RESOLUTION
-        occ_pooler_scales           = tuple(1.0 / input_shape[k].stride for k in self.in_features)
-        occ_sampling_ratio          = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_SAMPLING_RATIO
-        occ_pooler_type             = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_TYPE
-        occ_points_per_iteration    = cfg.MODEL.ROI_OCCNET_HEAD.SAMPLED_POINTS_PER_ITERATION
+        occ_pooler_resolution = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_RESOLUTION
+        occ_pooler_scales = tuple(1.0 / input_shape[k].stride for k in self.in_features)
+        occ_sampling_ratio = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_SAMPLING_RATIO
+        occ_pooler_type = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_TYPE
+        occ_points_per_iteration = cfg.MODEL.ROI_OCCNET_HEAD.SAMPLED_POINTS_PER_ITERATION
         # fmt: on
 
         self.occ_loss_weight = cfg.MODEL.ROI_OCCNET_HEAD.LOSS_WEIGHT
@@ -489,30 +490,56 @@ class MeshRCNNROIHeads(StandardROIHeads):
             pred_boxes = [x.pred_boxes[0] for x in instances]
             occ_features = self.occ_pooler(features, pred_boxes)
 
-            # read gt_points  and occupancies for each image
-            points = [x._fields['gt_points'] for x in targets]
-            points_tensor = torch.squeeze(torch.cat(points, dim=0), 1)
-            occupancies = [x._fields['gt_occupancies'] for x in targets]
-            occupancies_tensor = torch.squeeze(torch.cat(occupancies, dim=0), 1)
+            # INFERE MESHES
+            # can be done anyways
+            if targets is None:
+                # Run Mesh inference
 
-            # feed gt_points and features through occ_head
-            # TODO: 'blow up' points to fit occ_features dim
-            # something like:
-            # x = []
-            # n_batch = len(instances)
-            # n_instance = [len(x) for x in instances]
-            # for i in range(n_batch):
-            #     x.extend([torch.squeeze(points[i], 1) for j in range(n_instance[i])])
-            # points_tensor = torch.cat(x, dim=0)
-            # assert points_tensor.shape[0] == occ_features.shape[0]
+                #First approach: run separate generation for every feature vector
+                # TODO: Can Generator3D handle multiple feature vectors at once?
+                occupancy_network = self.occ_head.network
+                meshes = []
+                my_generator = Generator3D(
+                        occupancy_network,
+                        device=occ_features.device,
+                        threshold=0.2,
+                        resolution0=32,
+                        upsampling_steps=2,
+                        sample=False,
+                        refinement_step=0,
+                        simplify_nfaces=5000,
+                        preprocessor=None,
+                    )
+                for feature in occ_features:
+                    mesh = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
 
-            logits = self.occ_head(points_tensor, occ_features).logits
 
-            # occ net inference;
-            # TODO: don't filter instances
-            # occnet_rcnn_inference(logits, instances)
-            filtered_instances = [instance[0] for instance in instances]
-            occnet_rcnn_inference(logits, filtered_instances)
+
+
+            if not targets is None:
+                # read gt_points  and occupancies for each image
+                points = [x._fields['gt_points'] for x in targets]
+                points_tensor = torch.squeeze(torch.cat(points, dim=0), 1)
+                occupancies = [x._fields['gt_occupancies'] for x in targets]
+                occupancies_tensor = torch.squeeze(torch.cat(occupancies, dim=0), 1)
+
+                # feed gt_points and features through occ_head
+                # TODO: 'blow up' points to fit occ_features dim
+                # something like:
+                # x = []
+                # n_batch = len(instances)
+                # n_instance = [len(x) for x in instances]
+                # for i in range(n_batch):
+                #     x.extend([torch.squeeze(points[i], 1) for j in range(n_instance[i])])
+                # points_tensor = torch.cat(x, dim=0)
+                # assert points_tensor.shape[0] == occ_features.shape[0]
+
+                logits = self.occ_head(points_tensor, occ_features).logits
+
+                # occ net inference;
+                # TODO: don't filter instances
+                # occnet_rcnn_inference(logits, instances)
+                filtered_instances = [instance[0] for instance in instances]
+                occnet_rcnn_inference(logits, filtered_instances)
 
             return filtered_instances
-

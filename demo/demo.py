@@ -56,6 +56,7 @@ class VisualizationDemo(object):
         Returns:
             predictions (dict): the output of the model.
         """
+        self.predictor.model
         predictions = self.predictor(image)
         # Convert image from OpenCV BGR format to Matplotlib RGB format.
         image = image[:, :, ::-1]
