@@ -56,8 +56,10 @@ SHAPENET_SPLITS = {
     "shapenet_phones_train": ("", "ShapeNetPhonesNew120/shapenet_phones_train.json"),
     "shapenet_phones_test": ("", "ShapeNetPhonesNew120/shapenet_phones_test.json"),
     "shapenet_phones": ("", "ShapeNetPhonesNew5/shapenet_phones.json"),
-    "pix3d_s1_occ_bookcase_tool_train": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_train_bookcase_tool.json"),
-    "pix3d_s1_occ_bookcase_tool_test": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_test_bookcase_tool.json"),
+    # "pix3d_s1_occ_bookcase_tool_train": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_train_bookcase_tool.json"),
+    # "pix3d_s1_occ_bookcase_tool_test": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_test_bookcase_tool.json"),
+    "pix3d_s1_occ_bookcase_tool_train": ("pix3d", "pix3d/pix3d_s1_occ_train_bookcase_tool.json"),
+    "pix3d_s1_occ_bookcase_tool_test": ("pix3d", "pix3d/pix3d_s1_occ_test_bookcase_tool.json"),
 }
 
 
