@@ -52,21 +52,17 @@ def annotations_to_instances(annotations, image_size):
         K = [torch.tensor(obj["K"]) for obj in annotations]
         target.gt_K = torch.stack(K, dim=0)
 
-    # if len(annos) and "voxel" in annos[0]:
-    #     voxels = [obj["voxel"] for obj in annos]
+    # if len(annotations) and "voxel" in annotations[0]:
+    #     voxels = [obj["voxel"] for obj in annotations]
     #     target.gt_voxels = VoxelInstances(voxels)
     #
-    # if len(annos) and "mesh" in annos[0]:
-    #     meshes = [obj["mesh"] for obj in annos]
+    # if len(annotations) and "mesh" in annotations[0]:
+    #     meshes = [obj["mesh"] for obj in annotations]
     #     target.gt_meshes = MeshInstances(meshes)
 
     if len(annotations) and "dz" in annotations[0]:
         dz = [obj["dz"] for obj in annotations]
         target.gt_dz = torch.tensor(dz)
-
-    # if len(annotations) and "pointcloud_name" in annotations[0]:
-    #     pointcloud_name = [obj["pointcloud_name"] for obj in annotations]
-    #     target.gt_pointcloud_name = pointcloud_name
 
     if len(annotations) and "pointcloud" in annotations[0]:
         pointcloud = [obj["pointcloud"] for obj in annotations]
@@ -121,6 +117,15 @@ class OccDatasetMapper:
 
         assert dataset_names is not None
         # load unique occupancies all into memory
+        all_mesh_models = {}
+        for dataset_name in dataset_names:
+            json_file = MetadataCatalog.get(dataset_name).json_file
+            model_root = MetadataCatalog.get(dataset_name).image_root
+            logger.info("Loading meshes from {}...".format(dataset_name))
+            dataset_mesh_models = load_unique_meshes(json_file, model_root)
+            all_mesh_models.update(dataset_mesh_models)
+            logger.info("Unique objects loaded: {}".format(len(dataset_mesh_models)))
+
         all_pointcloud_models = {}
         all_points_models = {}
         for dataset_name in dataset_names:
@@ -133,6 +138,7 @@ class OccDatasetMapper:
             all_points_models.update(dataset_points_models)
             logger.info("Unique objects loaded: {}".format(len(dataset_pointcloud_models)))
 
+        self._all_mesh_models = all_mesh_models
         self._all_pointcloud_models = all_pointcloud_models
         self._all_points_models = all_points_models
 
@@ -165,6 +171,16 @@ class OccDatasetMapper:
                 occupancies_dict = self._all_points_models[annotation["points"]]["occupancies"]
                 occupancies_models.append([(occupancies_dict).copy()])
 
+        mesh_models = []
+        if "annotations" in dataset_dict:
+            for anno in dataset_dict["annotations"]:
+                mesh_models.append(
+                    [
+                        self._all_mesh_models[anno["mesh"]][0].clone(),
+                        self._all_mesh_models[anno["mesh"]][1].clone(),
+                    ]
+                )
+
         dataset_dict = {key: value for key, value in dataset_dict.items() if key != "mesh_models"}
         # TODO WTF?
         dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
@@ -175,6 +191,7 @@ class OccDatasetMapper:
                 annotation["pointcloud"] = pointcloud_models[i]
                 annotation["points"] = points_models[i]
                 annotation["occupancies"] = occupancies_models[i]
+                annotation["mesh"] = mesh_models[i]
 
         image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
         utils.check_image_size(dataset_dict, image)
@@ -246,7 +263,7 @@ class OccDatasetMapper:
             annotation.pop("dz", None)
 
         # each instance contains 1 voxel
-        if self.voxel_on and "voxel" in annotation:
+        if (self.voxel_on or self.zpred_on) and "voxel" in annotation:
             annotation["voxel"] = self._process_voxel(
                 annotation["voxel"], transforms, R=annotation["R"], t=annotation["t"]
             )
@@ -254,7 +271,7 @@ class OccDatasetMapper:
             annotation.pop("voxel", None)
 
         # each instance contains 1 mesh
-        if self.mesh_on and "mesh" in annotation:
+        if (self.mesh_on or self.zpred_on) and "mesh" in annotation:
             annotation["mesh"] = self._process_mesh(
                 annotation["mesh"], transforms, R=annotation["R"], t=annotation["t"]
             )
@@ -369,6 +386,23 @@ class OccDatasetMapper:
     def _process_occupancies(self, occupancies, transforms, R=None, t=None):
         # TODO occupancies probably don't need any extra transformation
         return occupancies
+
+
+def load_unique_meshes(json_file, model_root):
+    with open(json_file, "r") as f:
+        anns = json.load(f)["annotations"]
+    # find unique models
+    unique_models = []
+    for obj in anns:
+        model_type = obj["model"]
+        if model_type not in unique_models:
+            unique_models.append(model_type)
+    # read unique models
+    object_models = {}
+    for model in unique_models:
+        mesh = load_obj(os.path.join(model_root, model))
+        object_models[model] = [mesh[0], mesh[1].verts_idx]
+    return object_models
 
 
 def load_unique_pointclouds(json_file, model_root):

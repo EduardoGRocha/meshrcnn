@@ -36,8 +36,7 @@ class Trainer(DefaultTrainer):
 
     @classmethod
     def build_test_loader(cls, cfg, dataset_name):
-        if "shapenet" in dataset_name:
-
+        if "shapenet" in dataset_name or "occ" in dataset_name:
             return build_detection_test_loader(
                 cfg, dataset_name, mapper=OccDatasetMapper(cfg, False, dataset_names=(dataset_name,))
             )
@@ -49,7 +48,7 @@ class Trainer(DefaultTrainer):
     @classmethod
     def build_train_loader(cls, cfg):
         dataset_names = cfg.DATASETS.TRAIN
-        if "shapenet" in dataset_names[0]:
+        if "shapenet" in dataset_names[0] or "occ" in dataset_names[0]:
             return build_detection_train_loader(
                 cfg, mapper=OccDatasetMapper(cfg, True, dataset_names=dataset_names)
             )
@@ -82,21 +81,21 @@ class Trainer(DefaultTrainer):
                 )
         return results
 
-    # def build_hooks(self):
-    #     hooks = super().build_hooks()
-    #     hooks.insert(-1, LossEvalHook(
-    #         # self.cfg.TEST.EVAL_PERIOD,
-    #         1,
-    #         self.model,
-    #         build_detection_test_loader(
-    #             self.cfg,
-    #             self.cfg.DATASETS.TEST[0],
-    #             OccDatasetMapper(
-    #                 self.cfg, True,
-    #                 dataset_names=self.cfg.DATASETS.TEST)
-    #         )
-    #     ))
-    #     return hooks
+    def build_hooks(self):
+        hooks = super().build_hooks()
+        hooks.insert(-1, LossEvalHook(
+            self.cfg.TEST.EVAL_PERIOD,
+            # 1,
+            self.model,
+            build_detection_test_loader(
+                self.cfg,
+                self.cfg.DATASETS.TEST[0],
+                OccDatasetMapper(
+                    self.cfg, True,
+                    dataset_names=self.cfg.DATASETS.TEST)
+            )
+        ))
+        return hooks
 
 
 def setup(args):

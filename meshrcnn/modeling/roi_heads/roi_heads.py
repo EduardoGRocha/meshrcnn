@@ -150,11 +150,13 @@ class MeshRCNNROIHeads(StandardROIHeads):
         occ_sampling_ratio          = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_SAMPLING_RATIO
         occ_pooler_type             = cfg.MODEL.ROI_OCCNET_HEAD.POOLER_TYPE
         occ_points_per_iteration    = cfg.MODEL.ROI_OCCNET_HEAD.SAMPLED_POINTS_PER_ITERATION
+        total_occupancies_size      = cfg.MODEL.ROI_OCCNET_HEAD.TOTAL_OCCUPANCIES_SIZE
         # fmt: on
 
         self.occ_loss_weight = cfg.MODEL.ROI_OCCNET_HEAD.LOSS_WEIGHT
         self.cls_agnostic_occupancy = cfg.MODEL.ROI_OCCNET_HEAD.CLS_AGNOSTIC_OCCUPANCY
         self.occ_points_per_iteration = occ_points_per_iteration
+        self.total_occupancies_size = total_occupancies_size
 
         in_channels = [input_shape[f].channels for f in self.in_features][0]
 
@@ -430,54 +432,59 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
             losses = {}
             occ_features = self.occ_pooler(features, proposal_boxes)
-            # TODO hardcoded 100000
-            idx = np.random.randint(100000, size=self.occ_points_per_iteration)
-            sampled_points = [proposal.gt_points[:, :, idx, :] for proposal in proposals]
-            concatenated_points = torch.squeeze(torch.cat(sampled_points))
-            sampled_occupancies = [proposal.gt_occupancies[:, :, idx] for proposal in proposals]
-            concatenated_occupancies = torch.squeeze(torch.cat(sampled_occupancies))
-            occ_logits = self.occ_head(concatenated_points, occ_features).logits
-            loss_occ = occnet_rcnn_loss(
-                occ_logits, concatenated_occupancies, loss_weight=self.occ_loss_weight
-            )
-            losses.update({"loss_occnet": loss_occ})
-            return losses
+            if not occ_features.numel() == 0:
+                # TODO hardcoded 100000
+                idx = np.random.randint(self.total_occupancies_size, size=self.occ_points_per_iteration)
+                sampled_points = [proposal.gt_points[:, :, idx, :] for proposal in proposals]
+                concatenated_points = torch.squeeze(torch.cat(sampled_points), dim=1)
+                sampled_occupancies = [proposal.gt_occupancies[:, :, idx] for proposal in proposals]
+                concatenated_occupancies = torch.squeeze(torch.cat(sampled_occupancies), dim=1)
+                occ_logits = self.occ_head(concatenated_points, occ_features).logits
+                loss_occ = occnet_rcnn_loss(
+                    occ_logits, concatenated_occupancies, loss_weight=self.occ_loss_weight
+                )
+                losses.update({"loss_occnet": loss_occ})
+                return losses
+            else:
+                loss_occ = sum(k.sum() for k in self.occ_head.parameters()) * 0.0
+                losses.update({"loss_occnet": loss_occ})
+                return losses
         else:
-            pred_boxes = [x.pred_boxes for x in instances]
-            points = []
-            occupancies = []
-            # pred_boxes = [pred_boxes[1]]
-            # targets = [targets[1]]
-            # features = [features[3]]
-            # for pred_box, target in zip(pred_boxes, targets):
-            #     points += [target.gt_points]*len(pred_box)
-            #     occupancies += [target.gt_occupancies]*len(pred_box)
-            points = [targets[0].gt_points]
-            occupancies = [targets[0].gt_occupancies]
-            # points = torch.squeeze(torch.cat(points))
-            # occupancies = torch.squeeze(torch.cat(occupancies))
-            points = torch.cat(points)[0]
-            occupancies = torch.cat(occupancies)[0]
-
-            # pred_boxes[0].tensor[1] = pred_boxes[0].tensor[0]
-            occ_features = self.occ_pooler(features, pred_boxes)
-            # occ_features[1] = occ_features[0]
-            batch_size = occ_features.size(0)
-            occ_latent = self.occ_head.network.encode_inputs(occ_features)
-            # TODO setting sample to True
-            z = self.occ_head.network.get_z_from_prior((batch_size,), sample=True)
-
-            logits = self.occ_head(points, occ_features[0:1,:,:,:]).logits
-            loss_occ = occnet_rcnn_loss(
-                logits, occupancies, loss_weight=self.occ_loss_weight
-            )
-            log_sig = logits.sigmoid()
-            log_sig[log_sig < 0.5] = 0
-            log_sig[log_sig >= 0.5] = 1
-            occ_example = (logits.sigmoid() >= 0.5)
-            occ_gt = (occupancies >= 0.5)
-            union = (occ_example | occ_gt)
-            intersect = (occ_gt & occ_example)
-            iou = intersect.sum().double() / union.sum().double()
-            occnet_rcnn_inference(pred_boxes, instances)
+            # pred_boxes = [x.pred_boxes for x in instances]
+            # points = []
+            # occupancies = []
+            # # pred_boxes = [pred_boxes[1]]
+            # # targets = [targets[1]]
+            # # features = [features[3]]
+            # # for pred_box, target in zip(pred_boxes, targets):
+            # #     points += [target.gt_points]*len(pred_box)
+            # #     occupancies += [target.gt_occupancies]*len(pred_box)
+            # points = [targets[0].gt_points]
+            # occupancies = [targets[0].gt_occupancies]
+            # # points = torch.squeeze(torch.cat(points))
+            # # occupancies = torch.squeeze(torch.cat(occupancies))
+            # points = torch.cat(points)[0]
+            # occupancies = torch.cat(occupancies)[0]
+            #
+            # # pred_boxes[0].tensor[1] = pred_boxes[0].tensor[0]
+            # occ_features = self.occ_pooler(features, pred_boxes)
+            # # occ_features[1] = occ_features[0]
+            # batch_size = occ_features.size(0)
+            # occ_latent = self.occ_head.network.encode_inputs(occ_features)
+            # # TODO setting sample to True
+            # z = self.occ_head.network.get_z_from_prior((batch_size,), sample=True)
+            #
+            # logits = self.occ_head(points, occ_features[0:1,:,:,:]).logits
+            # loss_occ = occnet_rcnn_loss(
+            #     logits, occupancies, loss_weight=self.occ_loss_weight
+            # )
+            # log_sig = logits.sigmoid()
+            # log_sig[log_sig < 0.5] = 0
+            # log_sig[log_sig >= 0.5] = 1
+            # occ_example = (logits.sigmoid() >= 0.5)
+            # occ_gt = (occupancies >= 0.5)
+            # union = (occ_example | occ_gt)
+            # intersect = (occ_gt & occ_example)
+            # iou = intersect.sum().double() / union.sum().double()
+            # occnet_rcnn_inference(pred_boxes, instances)
             return instances

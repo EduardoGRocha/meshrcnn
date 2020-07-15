@@ -21,7 +21,7 @@ class LossEvalHook(HookBase):
     def _do_loss_eval(self):
         # Copying inference_on_dataset from evaluator.py
         total = len(self._data_loader)
-        num_warmup = min(5, total - 1)
+        num_warmup = min(1, total - 1)
 
         start_time = time.perf_counter()
         total_compute_time = 0
@@ -30,50 +30,50 @@ class LossEvalHook(HookBase):
         occnet_losses = []
         rpn_cls_losses = []
         rpn_loc_losses = []
-        # for idx, inputs in enumerate(self._data_loader):
-        #     if idx == num_warmup:
-        #         start_time = time.perf_counter()
-        #         total_compute_time = 0
-        #     start_compute_time = time.perf_counter()
-        #     if torch.cuda.is_available():
-        #         torch.cuda.synchronize()
-        #     total_compute_time += time.perf_counter() - start_compute_time
-        #     iters_after_start = idx + 1 - num_warmup * int(idx >= num_warmup)
-        #     seconds_per_img = total_compute_time / iters_after_start
-        #     if idx >= num_warmup * 2 or seconds_per_img > 5:
-        #         total_seconds_per_img = (time.perf_counter() - start_time) / iters_after_start
-        #         eta = datetime.timedelta(seconds=int(total_seconds_per_img * (total - idx - 1)))
-        #         log_every_n_seconds(
-        #             logging.INFO,
-        #             "Loss on Validation  done {}/{}. {:.4f} s / img. ETA={}".format(
-        #                 idx + 1, total, seconds_per_img, str(eta)
-        #             ),
-        #             n=5,
-        #         )
-        #     loss_batch = self._get_loss(inputs)
-        #     cls_losses.append(loss_batch[0])
-        #     box_reg_losses.append(loss_batch[1])
-        #     occnet_losses.append(loss_batch[2])
-        #     rpn_cls_losses.append(loss_batch[3])
-        #     rpn_loc_losses.append(loss_batch[4])
-        #
-        # mean_loss_cls = np.mean(cls_losses)
-        # mean_loss_box_reg = np.mean(box_reg_losses)
-        # mean_loss_occnet = np.mean(occnet_losses)
-        # mean_loss_rpn_cls = np.mean(rpn_cls_losses)
-        # mean_loss_rpn_loc = np.mean(rpn_loc_losses)
-        #
-        # self.trainer.storage.put_scalar('val_loss_cls', mean_loss_cls)
-        # self.trainer.storage.put_scalar('val_loss_box_reg', mean_loss_box_reg)
-        # self.trainer.storage.put_scalar('val_loss_occnet', mean_loss_occnet)
-        # self.trainer.storage.put_scalar('val_loss_rpn_cls', mean_loss_rpn_cls)
-        # self.trainer.storage.put_scalar('val_loss_rpn_loc', mean_loss_rpn_loc)
+        for idx, inputs in enumerate(self._data_loader):
+            if idx == num_warmup:
+                start_time = time.perf_counter()
+                total_compute_time = 0
+            start_compute_time = time.perf_counter()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            total_compute_time += time.perf_counter() - start_compute_time
+            iters_after_start = idx + 1 - num_warmup * int(idx >= num_warmup)
+            seconds_per_img = total_compute_time / iters_after_start
+            if idx >= num_warmup * 2 or seconds_per_img > 5:
+                total_seconds_per_img = (time.perf_counter() - start_time) / iters_after_start
+                eta = datetime.timedelta(seconds=int(total_seconds_per_img * (total - idx - 1)))
+                log_every_n_seconds(
+                    logging.INFO,
+                    "Loss on Validation  done {}/{}. {:.4f} s / img. ETA={}".format(
+                        idx + 1, total, seconds_per_img, str(eta)
+                    ),
+                    n=5,
+                )
+            loss_batch = self._get_loss(inputs)
+            cls_losses.append(loss_batch[0])
+            box_reg_losses.append(loss_batch[1])
+            occnet_losses.append(loss_batch[2])
+            rpn_cls_losses.append(loss_batch[3])
+            rpn_loc_losses.append(loss_batch[4])
 
-        self.trainer.storage.put_scalar('val_loss_cls', 0)
-        self.trainer.storage.put_scalar('val_loss_box_reg', 0)
-        self.trainer.storage.put_scalar('val_loss_occnet', 0)
-        self.trainer.storage.put_scalar('val_loss_rpn_cls', 0)
-        self.trainer.storage.put_scalar('val_loss_rpn_loc', 0)
+        mean_loss_cls = np.mean(cls_losses)
+        mean_loss_box_reg = np.mean(box_reg_losses)
+        mean_loss_occnet = np.mean(occnet_losses)
+        mean_loss_rpn_cls = np.mean(rpn_cls_losses)
+        mean_loss_rpn_loc = np.mean(rpn_loc_losses)
+
+        self.trainer.storage.put_scalar('val_loss_cls', mean_loss_cls)
+        self.trainer.storage.put_scalar('val_loss_box_reg', mean_loss_box_reg)
+        self.trainer.storage.put_scalar('val_loss_occnet', mean_loss_occnet)
+        self.trainer.storage.put_scalar('val_loss_rpn_cls', mean_loss_rpn_cls)
+        self.trainer.storage.put_scalar('val_loss_rpn_loc', mean_loss_rpn_loc)
+
+        # self.trainer.storage.put_scalar('val_loss_cls', 0)
+        # self.trainer.storage.put_scalar('val_loss_box_reg', 0)
+        # self.trainer.storage.put_scalar('val_loss_occnet', 0)
+        # self.trainer.storage.put_scalar('val_loss_rpn_cls', 0)
+        # self.trainer.storage.put_scalar('val_loss_rpn_loc', 0)
         comm.synchronize()
         # return losses
 

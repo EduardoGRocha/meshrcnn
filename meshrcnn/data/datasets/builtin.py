@@ -34,6 +34,8 @@ def get_pix3d_metadata():
 def get_shapenet_metadata():
     meta = [
         {"name": "telephone", "color": [255, 255, 25], "id": 1},
+        {"name": "bookcase", "color": [230, 25, 75], "id": 2},  # noqa
+        {"name": "tool", "color": [70, 240, 240], "id": 3},  # noqa
     ]
 
     return meta
@@ -54,6 +56,8 @@ SHAPENET_SPLITS = {
     "shapenet_phones_train": ("", "ShapeNetPhonesNew120/shapenet_phones_train.json"),
     "shapenet_phones_test": ("", "ShapeNetPhonesNew120/shapenet_phones_test.json"),
     "shapenet_phones": ("", "ShapeNetPhonesNew5/shapenet_phones.json"),
+    "pix3d_s1_occ_bookcase_tool_train": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_train_bookcase_tool.json"),
+    "pix3d_s1_occ_bookcase_tool_test": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_test_bookcase_tool.json"),
 }
 
 
@@ -91,10 +95,20 @@ def register_shapenet(dataset_name, json_file, image_root, root="datasets"):
         dataset_name, lambda: load_shapenet_json(json_file, image_root, dataset_name)
     )
     things_ids = [k["id"] for k in get_shapenet_metadata()]
-    thing_classes = [k["name"] for k in get_shapenet_metadata()]
-    thing_colors = [k["color"] for k in get_shapenet_metadata()]
+    # TODO terrible coding, probably adding more info to splits solves this mess
+    if "bookcase" in dataset_name and "tool" in dataset_name:
+        thing_classes = ["bookcase", "tool"]
+        thing_colors = [[230, 25, 75], [70, 240, 240]]
+        thing_dataset_id_to_contiguous_id = {1: 0, 2: 1}
+    elif "bookcase" in dataset_name:
+        thing_classes = ["bookcase"]
+        thing_colors = [[230, 25, 75]]
+        thing_dataset_id_to_contiguous_id = {1: 0}
+    else:
+        thing_classes = ["telephone"]
+        thing_colors = [[255, 255, 25]]
+        thing_dataset_id_to_contiguous_id = {1: 0}
 
-    thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(things_ids)}
     json_file = os.path.join(root, json_file)
     image_root = os.path.join(root, image_root)
     metadata = {
