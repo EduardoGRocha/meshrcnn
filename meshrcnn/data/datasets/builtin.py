@@ -36,6 +36,7 @@ def get_shapenet_metadata():
         {"name": "telephone", "color": [255, 255, 25], "id": 1},
         {"name": "bookcase", "color": [230, 25, 75], "id": 2},  # noqa
         {"name": "tool", "color": [70, 240, 240], "id": 3},  # noqa
+        {"name": "table", "color": [245, 130, 48], "id": 4},  # noqa
     ]
 
     return meta
@@ -56,10 +57,14 @@ SHAPENET_SPLITS = {
     "shapenet_phones_train": ("", "ShapeNetPhonesNew120/shapenet_phones_train.json"),
     "shapenet_phones_test": ("", "ShapeNetPhonesNew120/shapenet_phones_test.json"),
     "shapenet_phones": ("", "ShapeNetPhonesNew5/shapenet_phones.json"),
-    # "pix3d_s1_occ_bookcase_tool_train": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_train_bookcase_tool.json"),
-    # "pix3d_s1_occ_bookcase_tool_test": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_test_bookcase_tool.json"),
-    "pix3d_s1_occ_bookcase_tool_train": ("pix3d", "pix3d/pix3d_s1_occ_train_bookcase_tool.json"),
-    "pix3d_s1_occ_bookcase_tool_test": ("pix3d", "pix3d/pix3d_s1_occ_test_bookcase_tool.json"),
+    "pix3d_s1_occ_bookcase_tool_train": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_train_bookcase_tool.json"),
+    "pix3d_s1_occ_bookcase_tool_test": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_test_bookcase_tool.json"),
+    "pix3d_s1_occ_table_train": ("pix3d", "pix3d/pix3d_s1_occ_train_table.json"),
+    "pix3d_s1_occ_table_test": ("pix3d", "pix3d/pix3d_s1_occ_test_table.json"),
+    "shapenet_table_1": ("", "ShapeNetTable1/shapenet_tables.json"),
+    "pix3d_s1_occ_table_train_1": ("pix3d", "pix3d/pix3d_s1_occ_train_table_1.json"),
+    # "pix3d_s1_occ_bookcase_tool_train": ("pix3d", "pix3d/pix3d_s1_occ_train_bookcase_tool.json"),
+    # "pix3d_s1_occ_bookcase_tool_test": ("pix3d", "pix3d/pix3d_s1_occ_test_bookcase_tool.json"),
 }
 
 
@@ -106,6 +111,10 @@ def register_shapenet(dataset_name, json_file, image_root, root="datasets"):
         thing_classes = ["bookcase"]
         thing_colors = [[230, 25, 75]]
         thing_dataset_id_to_contiguous_id = {1: 0}
+    elif "table" in dataset_name:
+        thing_classes = ["table"]
+        thing_colors = [[245, 130, 48]]
+        thing_dataset_id_to_contiguous_id = {1: 0}
     else:
         thing_classes = ["telephone"]
         thing_colors = [[255, 255, 25]]
@@ -122,6 +131,10 @@ def register_shapenet(dataset_name, json_file, image_root, root="datasets"):
     MetadataCatalog.get(dataset_name).set(
         json_file=json_file, image_root=image_root, evaluator_type="shapenet", **metadata
     )
+
+#DatasetCatalog.clear()
+# print(MetadataCatalog.list())
+print(MetadataCatalog.get('shapenet_phones'))
 
 
 for key, (data_root, anno_file) in PIX3D_SPLITS.items():

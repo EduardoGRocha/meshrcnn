@@ -6,6 +6,7 @@ from detectron2.utils.registry import Registry
 from torch import nn
 from meshrcnn.modeling.roi_heads.occnet import OccupancyNetwork
 from torch.nn import functional as F
+from torch import distributions as dist
 
 from meshrcnn.modeling.roi_heads.occnet.decoder import DecoderCBatchNorm
 from meshrcnn.modeling.roi_heads.occnet.encoder import MyEncoder
@@ -17,6 +18,17 @@ def occnet_rcnn_loss(logits, occupancies, loss_weight=1.0):
     # TODO KL divergence removed from original code
     loss_bin_cross_entropy = F.binary_cross_entropy_with_logits(logits, occupancies, reduction='none')
     loss = loss_bin_cross_entropy.sum(-1).mean()
+    return loss * loss_weight / float(logits.shape[1])
+
+
+def occnet_rcnn_loss_KL(logits, occupancies, q_z, p0_z, loss_weight=1.0):
+    # KL-divergence
+    kl = dist.kl_divergence(q_z, p0_z).sum(dim=-1)
+    loss = kl.mean()
+    loss_i = F.binary_cross_entropy_with_logits(
+        logits, occupancies, reduction='none')
+    loss = loss + loss_i.sum(-1).mean()
+
     return loss * loss_weight / float(logits.shape[1])
 
 
@@ -54,9 +66,18 @@ class OccNetRCNNHead(nn.Module):
 
     # Input 14x14xC feature map + set of points.
     #   Output of size
-    # TODO is sample argument needed
+    # TODO is sample argument needed?
     def forward(self, occnet_points, occnet_features, sample=True):
         return self.network.forward(occnet_points, occnet_features, sample=sample)
+
+    def encode_inputs(self, inputs):
+        return self.network.encode_inputs(inputs)
+
+    def decode(self, p, z, c, **kwargs):
+        return self.network.decode(p, z, c, **kwargs)
+
+    def infer_z(self, p, occ, c, **kwargs):
+        return self.network.infer_z(p, occ, c, **kwargs)
 
 
 def build_occ_head(cfg, input_shape):

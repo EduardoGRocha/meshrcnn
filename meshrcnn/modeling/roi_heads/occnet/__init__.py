@@ -33,7 +33,7 @@ class OccupancyNetwork(nn.Module):
                  device=None):
         super().__init__()
         if p0_z is None:
-            p0_z = dist.Normal(torch.tensor([]), torch.tensor([]))
+            p0_z = dist.Normal(torch.tensor([]).to(device), torch.tensor([]).to(device))
 
         self.decoder = decoder.to(device)
 
