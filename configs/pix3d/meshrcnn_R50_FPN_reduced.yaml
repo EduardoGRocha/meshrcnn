@@ -1,6 +1,7 @@
 _BASE_: "MESH-RCNN-FPN.yaml"
 MODEL:
-  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+#  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  WEIGHTS: "output/model_final.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
 #  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-18.pkl"
   MASK_ON: False
   VOXEL_ON: False
@@ -80,7 +81,7 @@ DATASETS:
 #  TRAIN: ("pix3d_s1_train_bookcase",)
 #  TEST: ("pix3d_s1_test_bookcase",)
 SOLVER:
-  BASE_LR: 0.003
+  BASE_LR: 0.00003
 #  WEIGHT_DECAY: 0.0001
 #  STEPS: (12800, 16000)
 #  MAX_ITER: 16800
