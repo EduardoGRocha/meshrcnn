@@ -33,9 +33,9 @@ def occnet_rcnn_loss_KL(logits, occupancies, q_z, p0_z, loss_weight=1.0):
 
 
 def occnet_rcnn_inference(pred_occnet_logits, pred_instances):
-    cls_agnostic_occupancy = pred_occnet_logits, pred_instances
+    #cls_agnostic_occupancy = pred_occnet_logits.size(1) == 1
 
-    if cls_agnostic_occupancy:
+    if True:
         occnet_probs_pred = pred_occnet_logits.sigmoid()
     else:
         # TODO probably leave it out by now
@@ -52,6 +52,12 @@ def occnet_rcnn_inference(pred_occnet_logits, pred_instances):
     for prob, instances in zip(occnet_probs_pred, pred_instances):
         instances.pred_occupancies = prob  # (1, D, H, W)
 
+def occnet_mesh_rcnn_inference(pred_occnet_meshes, pred_instances):
+    num_boxes_per_image = [len(i) for i in pred_instances]
+    occnet_probs_pred = pred_occnet_meshes.split(num_boxes_per_image, dim=0)
+
+    for prob, instances in zip(occnet_probs_pred, pred_instances):
+        instances.pred_occupancies = prob  # (1, D, H, W)
 
 is_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if is_cuda else "cpu")

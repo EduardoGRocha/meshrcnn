@@ -282,6 +282,7 @@ class Generator3D(object):
             optimizer.zero_grad()
 
             # Loss
+            #f_v = torch.stack([torch.stack([v[face[0]], v[face[1]], v[face[2]]]) for face in faces])
             face_vertex = v[faces]
             eps = np.random.dirichlet((0.5, 0.5, 0.5), size=faces.shape[0])
             eps = torch.FloatTensor(eps).to(self.device)

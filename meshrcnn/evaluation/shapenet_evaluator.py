@@ -5,6 +5,7 @@ import itertools
 import json
 import logging
 import numpy as np
+import json
 import os
 from collections import OrderedDict
 import detectron2.utils.comm as comm
@@ -162,7 +163,19 @@ class ShapeNetEvaluator(DatasetEvaluator):
             )
 
             # save results
-            #TODO
+
+            # Create pandas dataframe and save
+            # TODO add output dir
+            with open("output/evals.json", 'w') as out_file:
+                json.dump({"results": results}, out_file)
+
+            # eval_df = pd.DataFrame(results)
+            # eval_df.set_index(['idx'], inplace=True)
+            # eval_df.to_pickle(out_file)
+            # TODO: print mask too
+            self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in results])))
+            #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
+            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in results])))
 
 def evaluate_for_shapenet(
     predictions,
@@ -244,14 +257,14 @@ def evaluate_for_shapenet(
             pred_occ = occ[idx_sorted[pred_id]]
             pred_occ = (pred_occ >= occ_iou_tresh).cpu().numpy()
             gt_occ = (gt_occupancies >= 0.5)
-            iou = compute_iou(pred_occ, gt_occ)
+            iou = compute_iou(pred_occ, gt_occ[0:100])
 
             # add to dict
             pred_dict['pred_label'] = pred_label
             pred_dict['pred_biou'] = pred_biou
-            pred_dict['pred_score'] = pred_score.cpu().numpy()
+            pred_dict['pred_score'] = pred_score.cpu().numpy().tolist()
             pred_dict['gt_label'] = gt_label
-            pred_dict['iou'] = iou
+            pred_dict['iou'] = float(iou)
 
     return dict_list
 
