@@ -487,32 +487,34 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
             # TODO: change to all boxes (not possible due to gpu constraints)
             # pred_boxes = [x.pred_boxes for x in instances]
-            pred_boxes = [x.pred_boxes[0] for x in instances]
+            pred_boxes = [x.pred_boxes for x in instances]
             occ_features = self.occ_pooler(features, pred_boxes)
 
-            # INFERE MESHES
-            # can be done anyways
-            if targets is None:
-                # Run Mesh inference
 
-                #First approach: run separate generation for every feature vector
-                # TODO: Can Generator3D handle multiple feature vectors at once?
+            #First approach: run separate generation for every feature vector
+            # TODO: Can Generator3D handle multiple feature vectors at once?
+            if targets is None:
                 occupancy_network = self.occ_head.network
                 meshes = []
                 my_generator = Generator3D(
-                        occupancy_network,
-                        device=occ_features.device,
-                        threshold=0.2,
-                        resolution0=32,
-                        upsampling_steps=2,
-                        sample=False,
-                        refinement_step=0,
-                        simplify_nfaces=5000,
-                        preprocessor=None,
-                    )
+                            occupancy_network,
+                            device=occ_features.device,
+                            threshold=0.4,
+                            resolution0=32,
+                            upsampling_steps=2,
+                            sample=False,
+                            refinement_step=0,
+                            simplify_nfaces=5000,
+                            preprocessor=None,
+                )
+                i = 0
                 for feature in occ_features:
-                    mesh = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
-
+                    i += 1
+                    mesh, time = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
+                    # shortcut: save mesh
+                    mesh.export('/home/daniel/ADL4CV/meshes/mesh' + str(i) + '.obj')
+                    meshes.append(mesh)
+                # TODO: append generated meshes to instances
 
 
 
@@ -524,22 +526,22 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 occupancies_tensor = torch.squeeze(torch.cat(occupancies, dim=0), 1)
 
                 # feed gt_points and features through occ_head
-                # TODO: 'blow up' points to fit occ_features dim
+                # TODO: run for all points; check if this ligic is correct for multiple batches
                 # something like:
-                # x = []
-                # n_batch = len(instances)
-                # n_instance = [len(x) for x in instances]
-                # for i in range(n_batch):
-                #     x.extend([torch.squeeze(points[i], 1) for j in range(n_instance[i])])
-                # points_tensor = torch.cat(x, dim=0)
-                # assert points_tensor.shape[0] == occ_features.shape[0]
+                x = []
+                n_batch = len(instances)
+                n_instance = [len(x) for x in instances]
+                for i in range(n_batch):
+                    x.extend([torch.squeeze(points[i], 1) for j in range(n_instance[i])])
+                points_tensor = torch.cat(x, dim=0)
+                assert points_tensor.shape[0] == occ_features.shape[0]
 
-                logits = self.occ_head(points_tensor, occ_features).logits
+                logits = self.occ_head(points_tensor[:, 0:100, :], occ_features).logits
 
                 # occ net inference;
                 # TODO: don't filter instances
                 # occnet_rcnn_inference(logits, instances)
                 filtered_instances = [instance[0] for instance in instances]
-                occnet_rcnn_inference(logits, filtered_instances)
+                occnet_rcnn_inference(logits, instances)
 
-            return filtered_instances
+            return instances

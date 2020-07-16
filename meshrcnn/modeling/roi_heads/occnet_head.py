@@ -21,9 +21,9 @@ def occnet_rcnn_loss(logits, occupancies, loss_weight=1.0):
 
 
 def occnet_rcnn_inference(pred_occnet_logits, pred_instances):
-    cls_agnostic_occupancy = pred_occnet_logits, pred_instances
+    #cls_agnostic_occupancy = pred_occnet_logits.size(1) == 1
 
-    if cls_agnostic_occupancy:
+    if True:
         occnet_probs_pred = pred_occnet_logits.sigmoid()
     else:
         # TODO probably leave it out by now
