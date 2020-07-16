@@ -1,7 +1,8 @@
 _BASE_: "MESH-RCNN-FPN.yaml"
 MODEL:
-  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
-#  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-18.pkl"
+#  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  #  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-18.pkl"
+  WEIGHTS: "output/model_final.pth"
   MASK_ON: False
   VOXEL_ON: False
   MESH_ON: False
@@ -88,7 +89,7 @@ SOLVER:
 #  WARMUP_ITERS: 1600
 #  BASE_LR: 0.001
   WEIGHT_DECAY: 0.0001
-  STEPS: (4500, 8000)
+  STEPS: (2000, 7000)
   MAX_ITER: 9000
   WARMUP_ITERS: 1000
   WARMUP_FACTOR: 0.1
