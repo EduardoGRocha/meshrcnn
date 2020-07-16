@@ -26,6 +26,7 @@ from meshrcnn.modeling.roi_heads.voxel_head import (
 from meshrcnn.modeling.roi_heads.occnet_head import (
     occnet_rcnn_loss,
     occnet_rcnn_inference,
+    occnet_mesh_rcnn_inference,
     build_occ_head,
 )
 
@@ -507,14 +508,17 @@ class MeshRCNNROIHeads(StandardROIHeads):
                             simplify_nfaces=5000,
                             preprocessor=None,
                 )
-                i = 0
+                #i = 0
                 for feature in occ_features:
-                    i += 1
+                    #i += 1
                     mesh, time = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
                     # shortcut: save mesh
-                    mesh.export('/home/daniel/ADL4CV/meshes/mesh' + str(i) + '.obj')
+                    #mesh.export('/home/daniel/ADL4CV/meshes/mesh' + str(i) + '.obj')
                     meshes.append(mesh)
+
+
                 # TODO: append generated meshes to instances
+                occnet_mesh_rcnn_inference(meshes, instances)
 
 
 
@@ -526,7 +530,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 occupancies_tensor = torch.squeeze(torch.cat(occupancies, dim=0), 1)
 
                 # feed gt_points and features through occ_head
-                # TODO: run for all points; check if this ligic is correct for multiple batches
+                # TODO: run for all points; check if this logic is correct for multiple batches
                 # something like:
                 x = []
                 n_batch = len(instances)
