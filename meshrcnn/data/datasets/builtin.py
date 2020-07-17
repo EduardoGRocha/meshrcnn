@@ -61,7 +61,7 @@ SHAPENET_SPLITS = {
     "pix3d_s1_occ_bookcase_tool_test": ("pix3d_occ_bookcase_tool", "pix3d_occ_bookcase_tool/pix3d_s1_occ_test_bookcase_tool.json"),
     "pix3d_s1_occ_table_train": ("pix3d", "pix3d/pix3d_s1_occ_train_table.json"),
     "pix3d_s1_occ_table_test": ("pix3d", "pix3d/pix3d_s1_occ_test_table.json"),
-    "shapenet_table_1": ("", "ShapeNetTable1/shapenet_tables.json"),
+    "shapenet_table_1": ("ShapeNetTable1", "ShapeNetTable1/shapenet_tables.json"),
     "pix3d_s1_occ_table_train_1": ("pix3d", "pix3d/pix3d_s1_occ_train_table_1.json"),
     # "pix3d_s1_occ_bookcase_tool_train": ("pix3d", "pix3d/pix3d_s1_occ_train_bookcase_tool.json"),
     # "pix3d_s1_occ_bookcase_tool_test": ("pix3d", "pix3d/pix3d_s1_occ_test_bookcase_tool.json"),

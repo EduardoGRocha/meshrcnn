@@ -2,11 +2,12 @@ _BASE_: "MESH-RCNN-FPN.yaml"
 MODEL:
   BACKBONE:
     FREEZE_AT: 5
-  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+#  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  WEIGHTS: "meshrcnn://meshrcnn_R50.pth"
   MASK_ON: True
   VOXEL_ON: False
   MESH_ON: False
-  ZPRED_ON: True
+  ZPRED_ON: False
   OCC_ON: True
   RESNETS:
     DEPTH: 50
@@ -70,10 +71,10 @@ DATASETS:
 #  TEST: ("shapenet_phones",)
 #  TRAIN: ("pix3d_s1_occ_bookcase_tool_train",)
 #  TEST: ("pix3d_s1_occ_bookcase_tool_test",)
-  TRAIN: ("pix3d_s1_occ_table_train_1",)
-  TEST: ("pix3d_s1_occ_table_train_1",)
-#  TRAIN: ("shapenet_table_1",)
-#  TEST: ("shapenet_table_1",)
+#  TRAIN: ("pix3d_s1_occ_table_train_1",)
+#  TEST: ("pix3d_s1_occ_table_train_1",)
+  TRAIN: ("shapenet_table_1",)
+  TEST: ("shapenet_table_1",)
 #  TEST: ("pix3d_s1_occ_table_test",)
 #  TEST: ("pix3d_s1_occ_bookcase_tool_train",)
 #  TRAIN: ("pix3d_s1_train_bookcase",)

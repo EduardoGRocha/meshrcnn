@@ -116,14 +116,14 @@ class OccDatasetMapper:
 
         assert dataset_names is not None
         # load unique occupancies all into memory
-        all_mesh_models = {}
-        for dataset_name in dataset_names:
-            json_file = MetadataCatalog.get(dataset_name).json_file
-            model_root = MetadataCatalog.get(dataset_name).image_root
-            logger.info("Loading meshes from {}...".format(dataset_name))
-            dataset_mesh_models = load_unique_meshes(json_file, model_root)
-            all_mesh_models.update(dataset_mesh_models)
-            logger.info("Unique objects loaded: {}".format(len(dataset_mesh_models)))
+        # all_mesh_models = {}
+        # for dataset_name in dataset_names:
+        #     json_file = MetadataCatalog.get(dataset_name).json_file
+        #     model_root = MetadataCatalog.get(dataset_name).image_root
+        #     logger.info("Loading meshes from {}...".format(dataset_name))
+        #     dataset_mesh_models = load_unique_meshes(json_file, model_root)
+        #     all_mesh_models.update(dataset_mesh_models)
+        #     logger.info("Unique objects loaded: {}".format(len(dataset_mesh_models)))
 
         all_pointcloud_models = {}
         all_points_models = {}
@@ -137,7 +137,7 @@ class OccDatasetMapper:
             all_points_models.update(dataset_points_models)
             logger.info("Unique objects loaded: {}".format(len(dataset_pointcloud_models)))
 
-        self._all_mesh_models = all_mesh_models
+        # self._all_mesh_models = all_mesh_models
         self._all_pointcloud_models = all_pointcloud_models
         self._all_points_models = all_points_models
 
@@ -170,15 +170,15 @@ class OccDatasetMapper:
                 occupancies_dict = self._all_points_models[annotation["points"]]["occupancies"]
                 occupancies_models.append([(occupancies_dict).copy()])
 
-        mesh_models = []
-        if "annotations" in dataset_dict:
-            for anno in dataset_dict["annotations"]:
-                mesh_models.append(
-                    [
-                        self._all_mesh_models[anno["mesh"]][0].clone(),
-                        self._all_mesh_models[anno["mesh"]][1].clone(),
-                    ]
-                )
+        # mesh_models = []
+        # if "annotations" in dataset_dict:
+        #     for anno in dataset_dict["annotations"]:
+        #         mesh_models.append(
+        #             [
+        #                 self._all_mesh_models[anno["mesh"]][0].clone(),
+        #                 self._all_mesh_models[anno["mesh"]][1].clone(),
+        #             ]
+        #         )
 
         dataset_dict = {key: value for key, value in dataset_dict.items() if key != "mesh_models"}
         # TODO WTF?
@@ -190,7 +190,7 @@ class OccDatasetMapper:
                 annotation["pointcloud"] = pointcloud_models[i]
                 annotation["points"] = points_models[i]
                 annotation["occupancies"] = occupancies_models[i]
-                annotation["mesh"] = mesh_models[i]
+                # annotation["mesh"] = mesh_models[i]
 
         image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
         utils.check_image_size(dataset_dict, image)
