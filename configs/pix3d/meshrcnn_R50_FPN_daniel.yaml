@@ -1,0 +1,100 @@
+_BASE_: "MESH-RCNN-FPN.yaml"
+OUTPUT_DIR: "output/shapenet_table"
+MODEL:
+  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+#  WEIGHTS: "output/model_final.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+#  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-18.pkl"
+  BACKBONE:
+    FREEZE_AT: 5
+  MASK_ON: True
+  VOXEL_ON: False
+  MESH_ON: False
+  ZPRED_ON: False
+  OCC_ON: True
+  RESNETS:
+    DEPTH: 50
+#    DEPTH: 18
+#    RES2_OUT_CHANNELS: 64
+  RPN:
+    IOU_THRESHOLDS: [0.2, 0.5, 0.7]
+    IOU_LABELS: [-1, 0, -1, 1]
+    SMOOTH_L1_BETA: 0.111
+  ROI_HEADS:
+    NAME: "MeshRCNNROIHeads"
+    BATCH_SIZE_PER_IMAGE: 8
+    NUM_CLASSES: 1 # Number of foreground classes
+    IOU_THRESHOLDS: [0.2, 0.5]
+    IOU_LABELS: [-1, 0, 1]
+  ROI_BOX_HEAD:
+    SMOOTH_L1_BETA: 1.0
+  ROI_Z_HEAD:
+    NAME: "FastRCNNFCHead"
+    Z_REG_WEIGHT: 1.0
+    SMOOTH_L1_BETA: 1.0
+  ROI_MASK_HEAD:
+    NAME: "MaskRCNNConvUpsampleHead"
+    POOLER_RESOLUTION: 14
+    POOLER_SAMPLING_RATIO: 2
+    NUM_CONV: 4
+  ROI_VOXEL_HEAD:
+    NAME: "VoxelRCNNConvUpsampleHead"
+    POOLER_RESOLUTION: 12
+    POOLER_SAMPLING_RATIO: 2
+    NUM_CONV: 4
+    NUM_DEPTH: 24
+    CLS_AGNOSTIC_VOXEL: True
+    LOSS_WEIGHT: 3.0
+    CUBIFY_THRESH: 0.2
+  ROI_MESH_HEAD:
+    NAME: "MeshRCNNGraphConvHead"
+    POOLER_RESOLUTION: 14
+    POOLER_SAMPLING_RATIO: 2
+    NUM_STAGES: 3
+    NUM_GRAPH_CONVS: 3
+    GRAPH_CONV_DIM: 128
+    GRAPH_CONV_INIT: "normal"
+    GT_COORD_THRESH: 5.0
+    CHAMFER_LOSS_WEIGHT: 1.0
+    NORMALS_LOSS_WEIGHT: 0.1
+    EDGE_LOSS_WEIGHT: 1.0
+  ROI_OCCNET_HEAD:
+    NAME: "OccNetRCNNHead"
+    POOLER_RESOLUTION: 14
+    POOLER_SAMPLING_RATIO: 2
+    LOSS_WEIGHT: 5.0
+    CLS_AGNOSTIC_OCCUPANCY: True
+    SAMPLED_POINTS_PER_ITERATION: 2048
+#    TOTAL_OCCUPANCIES_SIZE: 200000
+    TOTAL_OCCUPANCIES_SIZE: 100000
+DATASETS:
+#  TRAIN: ("shapenet_phones_train",)
+#  TEST: ("shapenet_phones_train",)
+#  TEST: ("shapenet_phones_test",)
+#  TEST: ("shapenet_phones", )
+#  TRAIN: ("shapenet_phones",)
+#  TEST: ("shapenet_phones",)
+#  TRAIN: ("pix3d_s1_occ_bookcase_tool_train",)
+#  TEST: ("pix3d_s1_occ_bookcase_tool_test",)
+#  TRAIN: ("pix3d_s1_occ_table_train_1",)
+#  TEST: ("pix3d_s1_occ_table_train_1",)
+  TRAIN: ("shapenet_table_1",)
+  TEST: ("shapenet_table_1",)
+#  TEST: ("pix3d_s1_occ_table_test",)
+#  TEST: ("pix3d_s1_occ_bookcase_tool_train",)
+#  TRAIN: ("pix3d_s1_train_bookcase",)
+#  TEST: ("pix3d_s1_test_bookcase",)
+SOLVER:
+  BASE_LR: 0.00003
+#  WEIGHT_DECAY: 0.0001
+#  STEPS: (12800, 16000)
+#  MAX_ITER: 16800
+#  WARMUP_ITERS: 1600
+#  BASE_LR: 0.001
+  WEIGHT_DECAY: 0.0001
+  STEPS: (720, 900)
+  MAX_ITER: 1000
+  WARMUP_ITERS: 100
+  WARMUP_FACTOR: 0.1
+  IMS_PER_BATCH: 1
+#TEST:
+#  EVAL_PERIOD: 250
