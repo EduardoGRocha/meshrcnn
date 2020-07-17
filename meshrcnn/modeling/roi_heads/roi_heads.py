@@ -501,12 +501,15 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 )
                 for i, feature in enumerate(occ_features):
                     mesh, time = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
+
                     # shortcut: save mesh
                     mesh.export('output_debug/' + str(i) + '.obj')
                     meshes.append(mesh)
+                meshes_pyt3d = Meshes(verts=[torch.tensor(mesh.vertices) for mesh in meshes],
+                                   faces=[torch.tensor(mesh.faces) for mesh in meshes])
 
                 # TODO: append generated meshes to instances
-                occnet_mesh_rcnn_inference(meshes, instances)
+                mesh_rcnn_inference(meshes_pyt3d, instances)
 
             if not targets is None:
                 # read gt_points  and occupancies for each image
