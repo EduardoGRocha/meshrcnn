@@ -472,18 +472,17 @@ class MeshRCNNROIHeads(StandardROIHeads):
             occ_features = self.occ_pooler(features, pred_boxes)
 
             # INFER MESHES
-            # can be done anyways
-            if targets is None:
+            # can be done anyways but takes long
+            if True:
                 # Run Mesh inference
 
                 # First approach: run separate generation for every feature vector
-                # TODO: Can Generator3D handle multiple feature vectors at once?
                 occupancy_network = self.occ_head.network
                 meshes = []
                 my_generator = Generator3D(
                             occupancy_network,
                             device=occ_features.device,
-                            threshold=0.4,
+                            threshold=0.2,
                             resolution0=32,
                             upsampling_steps=2,
                             sample=False,
@@ -493,14 +492,14 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 )
                 for i, feature in enumerate(occ_features):
                     mesh, time = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
-
                     # shortcut: save mesh
-                    mesh.export('output_debug/' + str(i) + '.obj')
+                    # mesh.export('output_debug/' + str(i) + '.obj')
                     meshes.append(mesh)
-                meshes_pyt3d = Meshes(verts=[torch.tensor(mesh.vertices) for mesh in meshes],
-                                   faces=[torch.tensor(mesh.faces) for mesh in meshes])
-
-                # TODO: append generated meshes to instances
+                # evaluation script expect vertices to be float32
+                # TODO: many meshes turn out empty; why?
+                meshes_pyt3d = Meshes(verts=[torch.as_tensor(mesh.vertices, dtype=torch.float32, device=occ_features.device) for mesh in meshes],
+                                      faces=[torch.as_tensor(mesh.faces, device=occ_features.device) for mesh in meshes])
+                # append generated meshes to instances
                 mesh_rcnn_inference(meshes_pyt3d, instances)
 
             if targets is not None:
@@ -512,7 +511,6 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
                 # feed gt_points and features through occ_head
                 # TODO: run for all points; check if this logic is correct for multiple batches
-                # something like:
                 x = []
                 n_batch = len(instances)
                 n_instance = [len(x) for x in instances]
@@ -524,9 +522,6 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 logits = self.occ_head(points_tensor[:, 0:100, :], occ_features).logits
 
                 # occ net inference;
-                # TODO: don't filter instances
-                # occnet_rcnn_inference(logits, instances)
-                filtered_instances = [instance[0] for instance in instances]
                 occnet_rcnn_inference(logits, instances)
 
             return instances
