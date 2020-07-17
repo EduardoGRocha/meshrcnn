@@ -33,7 +33,15 @@ from meshrcnn.modeling.roi_heads.occnet_head import (
 
 from meshrcnn.modeling.roi_heads.z_head import build_z_head, z_rcnn_inference, z_rcnn_loss
 from meshrcnn.utils import vis as vis_utils
-from meshrcnn.generation.generator import Generator3D
+
+# For colab. Avoid having to build the libraries if they are not installed
+# Could also be that compiling once and then saving the .so files work in colab
+try:
+    from meshrcnn.generation.generator import Generator3D
+except ImportError:
+    class Generator3D:
+        def __init__(self, occ_network, **kwargs):
+            raise NotImplementedError("Mesh generation libraries not installed")
 
 
 @ROI_HEADS_REGISTRY.register()
@@ -466,35 +474,6 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 losses.update({"loss_occnet": loss_occ})
                 return losses
         else:
-            '''
-            pred_boxes = [x.pred_boxes for x in instances]
-            points = [targets[0].gt_points]
-            occupancies = [targets[0].gt_occupancies]
-            points = torch.cat(points)[0]
-            occupancies = torch.cat(occupancies)[0]
-
-            occ_features = self.occ_pooler(features, pred_boxes)
-                batch_size = occ_features.size(0)
-            occ_latent = self.occ_head.network.encode_inputs(occ_features)
-            # TODO setting sample to True
-            z = self.occ_head.network.get_z_from_prior((batch_size,), sample=True)
-
-            logits = self.occ_head(points, occ_features[0:1,:,:,:]).logits
-            loss_occ = occnet_rcnn_loss(
-                logits, occupancies, loss_weight=self.occ_loss_weight
-            )
-            log_sig = logits.sigmoid()
-            log_sig[log_sig < 0.5] = 0
-            log_sig[log_sig >= 0.5] = 1
-            occ_example = (logits.sigmoid() >= 0.5)
-            occ_gt = (occupancies >= 0.5)
-            union = (occ_example | occ_gt)
-            intersect = (occ_gt & occ_example)
-            iou = intersect.sum().double() / union.sum().double()
-            # occnet_rcnn_inference(pred_boxes, instances)
-            return instances
-            '''
-
             # TODO: change to all boxes (not possible due to gpu constraints)
             # pred_boxes = [x.pred_boxes for x in instances]
             pred_boxes = [x.pred_boxes for x in instances]
@@ -520,12 +499,10 @@ class MeshRCNNROIHeads(StandardROIHeads):
                             simplify_nfaces=5000,
                             preprocessor=None,
                 )
-                #i = 0
-                for feature in occ_features:
-                    #i += 1
+                for i, feature in enumerate(occ_features):
                     mesh, time = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
                     # shortcut: save mesh
-                    #mesh.export('/home/daniel/ADL4CV/meshes/mesh' + str(i) + '.obj')
+                    mesh.export('output_debug/' + str(i) + '.obj')
                     meshes.append(mesh)
 
                 # TODO: append generated meshes to instances
