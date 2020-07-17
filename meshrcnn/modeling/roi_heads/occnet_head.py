@@ -1,7 +1,5 @@
-import fvcore.nn.weight_init as weight_init
 import torch
-from detectron2.layers import Conv2d, ConvTranspose2d, cat, get_norm
-from detectron2.utils.events import get_event_storage
+from detectron2.layers import cat
 from detectron2.utils.registry import Registry
 from torch import nn
 from meshrcnn.modeling.roi_heads.occnet import OccupancyNetwork
@@ -15,13 +13,12 @@ ROI_OCCNET_HEAD_REGISTRY = Registry("ROI_OCCNET_HEAD")
 
 
 def occnet_rcnn_loss(logits, occupancies, loss_weight=1.0):
-    # TODO KL divergence removed from original code
     loss_bin_cross_entropy = F.binary_cross_entropy_with_logits(logits, occupancies, reduction='none')
     loss = loss_bin_cross_entropy.sum(-1).mean()
     return loss * loss_weight / float(logits.shape[1])
 
 
-def occnet_rcnn_loss_KL(logits, occupancies, q_z, p0_z, loss_weight=1.0):
+def occnet_rcnn_loss_kl(logits, occupancies, q_z, p0_z, loss_weight=1.0):
     # KL-divergence
     kl = dist.kl_divergence(q_z, p0_z).sum(dim=-1)
     loss = kl.mean()
@@ -67,6 +64,7 @@ def occnet_mesh_rcnn_inference(pred_occnet_meshes, pred_instances):
 
 is_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if is_cuda else "cpu")
+
 
 @ROI_OCCNET_HEAD_REGISTRY.register()
 class OccNetRCNNHead(nn.Module):
