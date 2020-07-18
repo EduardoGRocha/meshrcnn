@@ -6,7 +6,7 @@ MODEL:
 #  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-18.pkl"
   BACKBONE:
     FREEZE_AT: 5
-  MASK_ON: False
+  MASK_ON: True
   VOXEL_ON: False
   MESH_ON: False
   ZPRED_ON: False

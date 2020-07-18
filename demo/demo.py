@@ -7,6 +7,7 @@ import multiprocessing as mp
 import numpy as np
 import os
 import torch
+import glob
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.data.detection_utils import read_image
@@ -230,13 +231,33 @@ if __name__ == "__main__":
 
     cfg = setup_cfg(args)
 
-    im_name = args.input.split("/")[-1].split(".")[0]
 
-    demo = VisualizationDemo(
-        cfg, vis_highest_scoring=args.onlyhighest, output_dir=os.path.join(args.output, im_name)
-    )
 
     # use PIL, to be consistent with evaluation
-    img = read_image(args.input, format="BGR")
-    predictions = demo.run_on_image(img, focal_length=args.focal_length)
-    logger.info("Predictions saved in %s" % (os.path.join(args.output, im_name)))
+    if os.path.isdir(args.input):
+        print("\nProcessing input directory")
+        dirname = args.input.split("/")[-1]
+        out_dir = os.path.join(args.output, dirname)
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
+        ext = ['png', 'jpg']  # image formats here
+        files = []
+        [files.extend(glob.glob(args.input + '/*.' + e)) for e in ext]
+        for file in files:
+            im_name = file.split("/")[-1].split(".")[0]
+            demo = VisualizationDemo(
+                cfg, vis_highest_scoring=True, output_dir=os.path.join(out_dir, im_name)
+            )
+            img = read_image(file, format="BGR")
+            predictions = demo.run_on_image(img, focal_length=args.focal_length)
+            logger.info("Predictions saved in %s" % (os.path.join(out_dir, im_name)))
+
+    else:
+        print("\nProcessing input file")
+        im_name = args.input.split("/")[-1].split(".")[0]
+        demo = VisualizationDemo(
+            cfg, vis_highest_scoring=args.onlyhighest, output_dir=os.path.join(args.output, im_name)
+        )
+        img = read_image(args.input, format="BGR")
+        predictions = demo.run_on_image(img, focal_length=args.focal_length)
+        logger.info("Predictions saved in %s" % (os.path.join(args.output, im_name)))
