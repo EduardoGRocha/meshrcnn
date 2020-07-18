@@ -4,7 +4,7 @@ MODEL:
     FREEZE_AT: 5
 #  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
   WEIGHTS: "meshrcnn://meshrcnn_R50.pth"
-  MASK_ON: True
+  MASK_ON: False
   VOXEL_ON: False
   MESH_ON: False
   ZPRED_ON: False
@@ -59,7 +59,7 @@ MODEL:
     POOLER_SAMPLING_RATIO: 2
     LOSS_WEIGHT: 5.0
     CLS_AGNOSTIC_OCCUPANCY: True
-    SAMPLED_POINTS_PER_ITERATION: 5000
+    SAMPLED_POINTS_PER_ITERATION: 4096
 #    TOTAL_OCCUPANCIES_SIZE: 200000
     TOTAL_OCCUPANCIES_SIZE: 100000
 DATASETS:
@@ -73,24 +73,26 @@ DATASETS:
 #  TEST: ("pix3d_s1_occ_bookcase_tool_test",)
 #  TRAIN: ("pix3d_s1_occ_table_train_1",)
 #  TEST: ("pix3d_s1_occ_table_train_1",)
-  TRAIN: ("shapenet_table_1",)
-  TEST: ("shapenet_table_1",)
-#  TEST: ("pix3d_s1_occ_table_test",)
+#  TRAIN: ("shapenet_table_1",)
+#  TEST: ("shapenet_table_1",)
+  # Train on smaller Test file to speed up stuff
+  TRAIN: ("pix3d_s1_occ_table_test",)
+  TEST: ("pix3d_s1_occ_table_train",)
 #  TEST: ("pix3d_s1_occ_bookcase_tool_train",)
 #  TRAIN: ("pix3d_s1_train_bookcase",)
 #  TEST: ("pix3d_s1_test_bookcase",)
 SOLVER:
-  BASE_LR: 0.003
+  BASE_LR: 0.01
 #  WEIGHT_DECAY: 0.0001
 #  STEPS: (12800, 16000)
 #  MAX_ITER: 16800
 #  WARMUP_ITERS: 1600
 #  BASE_LR: 0.001
   WEIGHT_DECAY: 0.0001
-  STEPS: (720, 900)
-  MAX_ITER: 1000
-  WARMUP_ITERS: 100
+  STEPS: (4500, 6000)
+  MAX_ITER: 7200
+  WARMUP_ITERS: 1000
   WARMUP_FACTOR: 0.1
-  IMS_PER_BATCH: 1
+  IMS_PER_BATCH: 8
 #TEST:
 #  EVAL_PERIOD: 250

@@ -209,7 +209,9 @@ class MeshRCNNROIHeads(StandardROIHeads):
             losses.update(self._forward_z(features, proposals))
             losses.update(self._forward_mask(features, proposals))
             losses.update(self._forward_shape(features, proposals))
-            losses.update(self._forward_occupancy(features, proposals))
+            # Passing the gt_bbox for training to see if it allows to generalize
+            proposals[0].proposal_boxes = proposals[0].gt_boxes
+            losses.update(self._forward_occupancy(features, proposals, targets))
             # print minibatch examples
             if self._vis:
                 vis_utils.visualize_minibatch(self._misc["images"], self._misc, self._vis_dir, True)
@@ -429,101 +431,111 @@ class MeshRCNNROIHeads(StandardROIHeads):
         features = [features[f] for f in self.in_features]
 
         if self.training:
-            proposals, _ = select_foreground_proposals(instances, self.num_classes)
-            proposal_boxes = [x.proposal_boxes for x in proposals]
-
-            losses = {}
-            occ_features = self.occ_pooler(features, proposal_boxes)
-            if not occ_features.numel() == 0:
-                idx = np.random.randint(self.total_occupancies_size, size=self.occ_points_per_iteration)
-                sampled_points = [proposal.gt_points[:, :, idx, :] for proposal in proposals]
-                concatenated_points = torch.squeeze(torch.cat(sampled_points), dim=1)
-                sampled_occupancies = [proposal.gt_occupancies[:, :, idx] for proposal in proposals]
-                concatenated_occupancies = torch.squeeze(torch.cat(sampled_occupancies), dim=1)
-
-                if not self.use_kl_loss:
-                    occ_logits = self.occ_head(concatenated_points, occ_features).logits
-                    loss_occ = occnet_rcnn_loss(
-                        occ_logits, concatenated_occupancies, loss_weight=self.occ_loss_weight
-                    )
-                else:
-                    kwargs = {}
-
-                    c = self.occ_head.encode_inputs(occ_features).to(self.occ_head.network._device)
-                    q_z = self.occ_head.infer_z(concatenated_points, concatenated_occupancies, c, **kwargs)
-                    z = q_z.rsample().to(self.occ_head.network._device)
-
-                    # p0_z = self.occ_head.network.p0_z.to(self.occ_head.network._device)
-                    p0_z = self.occ_head.network.p0_z
-                    # General points
-                    logits = self.occ_head.decode(concatenated_points, z, c, **kwargs).logits
-                    loss_occ = occnet_rcnn_loss_kl(logits, concatenated_occupancies, q_z, p0_z, self.occ_loss_weight)
-
-                losses.update({"loss_occnet": loss_occ})
-                return losses
-            else:
-                loss_occ = sum(k.sum() for k in self.occ_head.parameters()) * 0.0
-                losses.update({"loss_occnet": loss_occ})
-                return losses
+            # Not inlining return to make it more explicit
+            # When training, return losses
+            losses = self._forward_occupancy_head_training(features, instances)
+            return losses
         else:
-            # TODO: change to all boxes (not possible due to gpu constraints)
-            # pred_boxes = [x.pred_boxes for x in instances]
-            pred_boxes = [x.pred_boxes for x in instances]
-            occ_features = self.occ_pooler(features, pred_boxes)
-
-            # INFER MESHES
-            # can be done anyways but takes long
-            if True:
-                # Run Mesh inference
-
-                # First approach: run separate generation for every feature vector
-                occupancy_network = self.occ_head.network
-                meshes = []
-                my_generator = Generator3D(
-                            occupancy_network,
-                            device=occ_features.device,
-                            threshold=0.2,
-                            resolution0=32,
-                            upsampling_steps=2,
-                            sample=False,
-                            refinement_step=0,
-                            simplify_nfaces=5000,
-                            preprocessor=None,
-                )
-                for i, feature in enumerate(occ_features):
-                    mesh, time = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
-                    # shortcut: save mesh
-                    # mesh.export('output_debug/' + str(i) + '.obj')
-                    meshes.append(mesh)
-                # evaluation script expect vertices to be float32
-                # TODO: many meshes turn out empty; why?
-                meshes_pyt3d = Meshes(verts=[torch.as_tensor(mesh.vertices, dtype=torch.float32, device=occ_features.device) for mesh in meshes],
-                                      faces=[torch.as_tensor(mesh.faces, device=occ_features.device) for mesh in meshes])
-                # append generated meshes to instances
-                mesh_rcnn_inference(meshes_pyt3d, instances)
-
-            if targets is not None:
-                # read gt_points  and occupancies for each image
-                points = [x._fields['gt_points'] for x in targets]
-                points_tensor = torch.squeeze(torch.cat(points, dim=0), 1)
-                occupancies = [x._fields['gt_occupancies'] for x in targets]
-                occupancies_tensor = torch.squeeze(torch.cat(occupancies, dim=0), 1)
-
-                # feed gt_points and features through occ_head
-                # TODO: run for all points; check if this logic is correct for multiple batches
-                x = []
-                n_batch = len(instances)
-                n_instance = [len(x) for x in instances]
-                for i in range(n_batch):
-                    x.extend([torch.squeeze(points[i], 1) for j in range(n_instance[i])])
-                points_tensor = torch.cat(x, dim=0)
-                assert points_tensor.shape[0] == occ_features.shape[0]
-
-                logits = self.occ_head(points_tensor[:, 0:100, :], occ_features).logits
-
-                # occ net inference;
-                occnet_rcnn_inference(logits, instances)
-
+            instances = self._forward_occupancy_head_not_training(features, instances, targets)
             return instances
 
+    def _forward_occupancy_head_training(self, features, instances):
+        proposals, _ = select_foreground_proposals(instances, self.num_classes)
+        proposal_boxes = [x.proposal_boxes for x in proposals]
+        losses = {}
+        occ_features = self.occ_pooler(features, proposal_boxes)
 
+        if not occ_features.numel() == 0:
+            idx = np.random.randint(self.total_occupancies_size, size=self.occ_points_per_iteration)
+            sampled_points = [proposal.gt_points[:, :, idx, :] for proposal in proposals]
+            concatenated_points = torch.squeeze(torch.cat(sampled_points), dim=1)
+            sampled_occ = [proposal.gt_occupancies[:, :, idx] for proposal in proposals]
+            concatenated_occ = torch.squeeze(torch.cat(sampled_occ), dim=1)
+
+            if not self.use_kl_loss:
+                loss_occ = self._compute_loss_occnet_without_kl(concatenated_occ, concatenated_points, occ_features)
+            else:
+                loss_occ = self._compute_loss_occnet_with_kl(concatenated_occ, concatenated_points, occ_features)
+
+            losses.update({"loss_occnet": loss_occ})
+            return losses
+        else:
+            loss_occ = sum(k.sum() for k in self.occ_head.parameters()) * 0.0
+            losses.update({"loss_occnet": loss_occ})
+            return losses
+
+    def _forward_occupancy_head_not_training(self, features, instances, targets):
+        # TODO: change to all boxes (not possible due to gpu constraints)
+        # pred_boxes = [x.pred_boxes for x in instances]
+        pred_boxes = [x.pred_boxes for x in instances]
+        occ_features = self.occ_pooler(features, pred_boxes)
+        # INFER MESHES
+        # can be done anyways but takes long
+        if True:
+            # Run Mesh inference
+            # First approach: run separate generation for every feature vector
+            occupancy_network = self.occ_head.network
+            meshes = []
+            my_generator = Generator3D(
+                occupancy_network,
+                device=occ_features.device,
+                threshold=0.2,
+                resolution0=32,
+                upsampling_steps=2,
+                sample=False,
+                refinement_step=0,
+                simplify_nfaces=5000,
+                preprocessor=None,
+            )
+            for i, feature in enumerate(occ_features):
+                mesh, time = my_generator.generate_mesh(torch.unsqueeze(feature, 0))
+                # shortcut: save mesh
+                # mesh.export('output_debug/' + str(i) + '.obj')
+                meshes.append(mesh)
+            # evaluation script expect vertices to be float32
+            # TODO: many meshes turn out empty; why?
+            meshes_pyt3d = Meshes(verts=[
+                torch.as_tensor(mesh.vertices, dtype=torch.float32, device=occ_features.device) for mesh in meshes],
+                faces=[torch.as_tensor(mesh.faces, device=occ_features.device) for mesh in meshes])
+            # append generated meshes to instances
+            mesh_rcnn_inference(meshes_pyt3d, instances)
+        if targets is not None:
+            # read gt_points  and occupancies for each image
+            points = [x._fields['gt_points'] for x in targets]
+            points_tensor = torch.squeeze(torch.cat(points, dim=0), 1)
+            occupancies = [x._fields['gt_occupancies'] for x in targets]
+            occupancies_tensor = torch.squeeze(torch.cat(occupancies, dim=0), 1)
+
+            # feed gt_points and features through occ_head
+            # TODO: run for all points; check if this logic is correct for multiple batches
+            x = []
+            n_batch = len(instances)
+            n_instance = [len(x) for x in instances]
+            for i in range(n_batch):
+                x.extend([torch.squeeze(points[i], 1) for j in range(n_instance[i])])
+            points_tensor = torch.cat(x, dim=0)
+            assert points_tensor.shape[0] == occ_features.shape[0]
+
+            logits = self.occ_head(points_tensor[:, 0:100, :], occ_features).logits
+
+            # occ net inference;
+            occnet_rcnn_inference(logits, instances)
+        return instances
+
+    def _compute_loss_occnet_without_kl(self, concatenated_occupancies, concatenated_points, occ_features):
+        occ_logits = self.occ_head(concatenated_points, occ_features).logits
+        loss_occ = occnet_rcnn_loss(
+            occ_logits, concatenated_occupancies, loss_weight=self.occ_loss_weight
+        )
+        return loss_occ
+
+    def _compute_loss_occnet_with_kl(self, concatenated_occupancies, concatenated_points, occ_features):
+        kwargs = {}
+        c = self.occ_head.encode_inputs(occ_features).to(self.occ_head.network._device)
+        q_z = self.occ_head.infer_z(concatenated_points, concatenated_occupancies, c, **kwargs)
+        z = q_z.rsample().to(self.occ_head.network._device)
+        p0_z = self.occ_head.network.p0_z
+        # General points
+        logits = self.occ_head.decode(concatenated_points, z, c, **kwargs).logits
+        loss_occ = occnet_rcnn_loss_kl(logits, concatenated_occupancies, q_z, p0_z, self.occ_loss_weight)
+        return loss_occ
