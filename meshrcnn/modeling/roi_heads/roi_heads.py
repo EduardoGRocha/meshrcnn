@@ -210,7 +210,8 @@ class MeshRCNNROIHeads(StandardROIHeads):
             losses.update(self._forward_mask(features, proposals))
             losses.update(self._forward_shape(features, proposals))
             # Passing the gt_bbox for training to see if it allows to generalize
-            proposals[0].proposal_boxes = proposals[0].gt_boxes
+            for i in range(len(proposals)):
+                proposals[i].proposal_boxes = proposals[i].gt_boxes
             losses.update(self._forward_occupancy(features, proposals, targets))
             # print minibatch examples
             if self._vis:
