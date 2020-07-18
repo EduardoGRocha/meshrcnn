@@ -21,7 +21,7 @@ from pytorch3d.utils import ico_sphere
 import meshrcnn.utils.VOCap as VOCap
 from meshrcnn.utils import shape as shape_utils
 from meshrcnn.utils import vis as vis_utils
-from meshrcnn.utils.metrics import compare_meshes
+from meshrcnn.utils.metrics import compare_meshes, compute_iou
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,12 @@ class Pix3DEvaluator(DatasetEvaluator):
         self._coco_api = COCO(self._metadata.json_file)
 
         self._filter_iou = 0.3
+        # TODO get it from config (?)
+        self._occ_iou_thresh = 0.3
+
+        # TODO get from config
+        self._has_camera_matrices = False
+        self._output_mask = cfg.MODEL.MASK_ON
 
         # load unique obj files
         assert dataset_name is not None
@@ -65,7 +71,8 @@ class Pix3DEvaluator(DatasetEvaluator):
         json_file = MetadataCatalog.get(dataset_name).json_file
         model_root = MetadataCatalog.get(dataset_name).image_root
         self._mesh_models = load_unique_meshes(json_file, model_root)
-        logger.info("Unique objects loaded: {}".format(len(self._mesh_models)))
+        self._points_models = load_unique_points(json_file, model_root)
+        logger.info("Unique objects loaded: {}".format(len(self._points_models)))
 
     def reset(self):
         self._predictions = []
@@ -80,6 +87,8 @@ class Pix3DEvaluator(DatasetEvaluator):
             tasks = tasks + ("segm",)
         if cfg.MODEL.MESH_ON or cfg.MODEL.VOXEL_ON or cfg.MODEL.OCC_ON:
             tasks = tasks + ("mesh",)
+        if cfg.MODEL.OCC_ON:
+            tasks = tasks + ("occ",)
         return tasks
 
     def process(self, inputs, outputs):
@@ -141,18 +150,20 @@ class Pix3DEvaluator(DatasetEvaluator):
 
     def _eval_predictions(self):
         """
-        Evaluate mesh rcnn predictions.
+        Evaluate predictions.
         """
-
-        if "segm" in self._tasks and "mesh" in self._tasks:
+        if "occ" in self._tasks and "bbox" in self._tasks:
             results = evaluate_for_pix3d(
                 self._predictions,
                 self._coco_api,
                 self._metadata,
                 self._filter_iou,
                 mesh_models=self._mesh_models,
+                points_models=self._points_models,
+                occ_iou_thresh=self._occ_iou_thresh,
                 device=self._device,
                 vis_preds=True,
+                has_camera_matrices=self._has_camera_matrices,
             )
 
             # print results
@@ -161,6 +172,16 @@ class Pix3DEvaluator(DatasetEvaluator):
             self._logger.info("Mesh AP %.5f" % (results["mesh_ap@%.1f" % 0.5]))
             self._results["shape"] = results
 
+            # Create pandas dataframe and save
+            # TODO add output dir
+            # with open("output/evals.json", 'w') as out_file:
+            #     json.dump({"results": results}, out_file)
+
+            # TODO: print mask too
+            self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in results])))
+            #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
+            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in results])))
+
 
 def evaluate_for_pix3d(
     predictions,
@@ -168,13 +189,17 @@ def evaluate_for_pix3d(
     metadata,
     filter_iou,
     mesh_models=None,
+    points_models=None,
     iou_thresh=0.5,
+    occ_iou_thresh=0.5,
     mask_thresh=0.5,
     device=None,
     vis_preds=False,
+    has_camera_matrices=False,
 ):
     from PIL import Image
 
+    dict_list = []
     if device is None:
         device = torch.device("cpu")
 
@@ -231,10 +256,14 @@ def evaluate_for_pix3d(
             continue
 
         # predictions
+        original_id = prediction["image_id"]
         scores = prediction["instances"].scores
         boxes = prediction["instances"].pred_boxes.to(device)
         labels = prediction["instances"].pred_classes
+        occ = prediction["instances"].pred_occupancies
+
         masks_rles = prediction["instances"].pred_masks_rle
+
         if hasattr(prediction["instances"], "pred_meshes"):
             meshes = prediction["instances"].pred_meshes  # preditected meshes
             verts = [mesh[0] for mesh in meshes]
@@ -243,13 +272,15 @@ def evaluate_for_pix3d(
         else:
             meshes = ico_sphere(4, device)
             meshes = meshes.extend(num_img_preds).to(device)
-        #if hasattr(prediction["instances"], "pred_dz"):
-        #    pred_dz = prediction["instances"].pred_dz
-        #    heights = boxes.tensor[:, 3] - boxes.tensor[:, 1]
-        #    # NOTE see appendix for derivation of pred dz
-        #    pred_dz = pred_dz[:, 0] * heights.cpu()
-        #else:
-        #    raise ValueError("Z range of box not predicted")
+
+        if has_camera_matrices:
+            if hasattr(prediction["instances"], "pred_dz"):
+                pred_dz = prediction["instances"].pred_dz
+                heights = boxes.tensor[:, 3] - boxes.tensor[:, 1]
+                # NOTE see appendix for derivation of pred dz
+                pred_dz = pred_dz[:, 0] * heights.cpu()
+            else:
+                raise ValueError("Z range of box not predicted")
         assert prediction["instances"].image_size[0] == image_height
         assert prediction["instances"].image_size[1] == image_width
 
@@ -260,22 +291,25 @@ def evaluate_for_pix3d(
         gt_anns = dataset.loadAnns(gt_ann_ids)[0]
         assert gt_anns["image_id"] == original_id
 
-        # get original ground truth mask, box, label & mesh
+        # get original ground truth mask, box, label, mesh & occupancies
         maskfile = os.path.join(metadata.image_root, gt_anns["segmentation"])
         gt_mask = torch.tensor(np.asarray(Image.open(maskfile), dtype=np.float32) / 255.0)
         assert gt_mask.shape[0] == image_height and gt_mask.shape[1] == image_width
 
         gt_mask = (gt_mask > 0).to(dtype=torch.uint8)  # binarize mask
         gt_mask_rle = [mask_util.encode(np.array(gt_mask[:, :, None], order="F"))[0]]
+
         gt_box = np.array(gt_anns["bbox"]).reshape(-1, 4)  # xywh from coco
         gt_box = BoxMode.convert(gt_box, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
         gt_label = gt_anns["category_id"]
         faux_gt_targets = Boxes(torch.tensor(gt_box, dtype=torch.float32, device=device))
 
         # load gt mesh and extrinsics/intrinsics
-        #gt_R = torch.tensor(gt_anns["rot_mat"]).to(device)
-        #gt_t = torch.tensor(gt_anns["trans_mat"]).to(device)
-        #gt_K = torch.tensor(gt_anns["K"]).to(device)
+        if has_camera_matrices:
+            gt_R = torch.tensor(gt_anns["rot_mat"]).to(device)
+            gt_t = torch.tensor(gt_anns["trans_mat"]).to(device)
+            gt_K = torch.tensor(gt_anns["K"]).to(device)
+
         if mesh_models is not None:
             modeltype = gt_anns["model"]
             gt_verts, gt_faces = (
@@ -287,8 +321,15 @@ def evaluate_for_pix3d(
         else:
             # load from disc
             raise NotImplementedError
-        #gt_verts = shape_utils.transform_verts(gt_verts, gt_R, gt_t)
-        #gt_zrange = torch.stack([gt_verts[:, 2].min(), gt_verts[:, 2].max()])
+
+        # Key for occupancies is like: 'occupancies/telephone/cfdd44745ba101bc714ce1441b585593/points.npz'
+        if points_models is not None:
+            modeltype = gt_anns["points"]
+            gt_occupancies = points_models[modeltype]["occupancies"]
+
+        if has_camera_matrices:
+            gt_verts = shape_utils.transform_verts(gt_verts, gt_R, gt_t)
+            gt_zrange = torch.stack([gt_verts[:, 2].min(), gt_verts[:, 2].max()])
         gt_mesh = Meshes(verts=[gt_verts], faces=[gt_faces])
 
         # box iou
@@ -304,27 +345,28 @@ def evaluate_for_pix3d(
         # # zranges = torch.stack([gt_zrange] * len(meshes), dim=0)
 
         # predicted zrange (= pred_dz)
-        #assert hasattr(prediction["instances"], "pred_dz")
-        # It's impossible to predict the center location in Z (=tc)
-        # from the image. See appendix for more.
-        #tc = (gt_zrange[1] + gt_zrange[0]) / 2.0
-        # Given a center location (tc) and a focal_length,
-        # pred_dz = pred_dz * box_h * tc / focal_length
-        # See appendix for more.
-        #zranges = torch.stack(
-        #    [
-        #        torch.stack(
-        #            [tc - tc * pred_dz[i] / 2.0 / gt_K[0], tc + tc * pred_dz[i] / 2.0 / gt_K[0]]
-        #        )
-        #        for i in range(len(meshes))
-        #    ],
-        #    dim=0,
-        #)
+        if has_camera_matrices:
+            assert hasattr(prediction["instances"], "pred_dz")
+            # It's impossible to predict the center location in Z (=tc)
+            # from the image. See appendix for more.
+            tc = (gt_zrange[1] + gt_zrange[0]) / 2.0
+            # Given a center location (tc) and a focal_length,
+            # pred_dz = pred_dz * box_h * tc / focal_length
+            # See appendix for more.
+            zranges = torch.stack(
+                [
+                    torch.stack(
+                        [tc - tc * pred_dz[i] / 2.0 / gt_K[0], tc + tc * pred_dz[i] / 2.0 / gt_K[0]]
+                    )
+                    for i in range(len(meshes))
+                ],
+                dim=0,
+            )
 
-        #gt_Ks = gt_K.view(1, 3).expand(len(meshes), 3)
-        #meshes = transform_meshes_to_camera_coord_system(
-        #    meshes, boxes.tensor, zranges, gt_Ks, image_size
-        #)
+            gt_Ks = gt_K.view(1, 3).expand(len(meshes), 3)
+            meshes = transform_meshes_to_camera_coord_system(
+                meshes, boxes.tensor, zranges, gt_Ks, image_size
+            )
 
         if vis_preds:
             vis_utils.visualize_predictions(
@@ -349,281 +391,14 @@ def evaluate_for_pix3d(
             # iou_filter with the ground truth prediction
             if valid_pred_ids[idx_sorted[pred_id], 0] == 0:
                 continue
-            # map to dataset category id
-            pred_label = reverse_id_mapping[labels[idx_sorted[pred_id]].item()]
-            pred_miou = miou[idx_sorted[pred_id]].item()
-            pred_biou = boxiou[idx_sorted[pred_id]].item()
-            pred_score = scores[idx_sorted[pred_id]].view(1).to(device)
-            # note that metrics returns f1 in % (=x100)
-            pred_f1 = shape_metrics[F1_TARGET][idx_sorted[pred_id]].item() / 100.0
 
-            # mask
-            tpfp = torch.tensor([0], dtype=torch.uint8, device=device)
-            if (
-                (pred_label == gt_label)
-                and (pred_miou > iou_thresh)
-                and (original_id not in mask_covered)
-            ):
-                tpfp[0] = 1
-                mask_covered.append(original_id)
-            mask_apscores[pred_label].append(pred_score)
-            mask_aplabels[pred_label].append(tpfp)
+            # TODO new
+            pred_dict = {
+                "id, pred_id": (original_id, pred_id)
+            }
+            dict_list.append(pred_dict)
 
             # box
-            tpfp = torch.tensor([0], dtype=torch.uint8, device=device)
-            if (
-                (pred_label == gt_label)
-                and (pred_biou > iou_thresh)
-                and (original_id not in box_covered)
-            ):
-                tpfp[0] = 1
-                box_covered.append(original_id)
-            box_apscores[pred_label].append(pred_score)
-            box_aplabels[pred_label].append(tpfp)
-
-            # mesh
-            tpfp = torch.tensor([0], dtype=torch.uint8, device=device)
-            if (
-                (pred_label == gt_label)
-                and (pred_f1 > iou_thresh)
-                and (original_id not in mesh_covered)
-            ):
-                tpfp[0] = 1
-                mesh_covered.append(original_id)
-            mesh_apscores[pred_label].append(pred_score)
-            mesh_aplabels[pred_label].append(tpfp)
-
-    # check things for eval
-    # assert npos.sum() == len(dataset.dataset["annotations"])
-    # convert to tensors
-    pix3d_metrics = {}
-    boxap, maskap, meshap = 0.0, 0.0, 0.0
-    valid = 0.0
-    for cat_id in cat_ids:
-        cat_name = dataset.loadCats([cat_id])[0]["name"]
-        if npos[cat_id] == 0:
-            continue
-        valid += 1
-
-        cat_box_ap = VOCap.compute_ap(
-            torch.cat(box_apscores[cat_id]), torch.cat(box_aplabels[cat_id]), npos[cat_id]
-        )
-        boxap += cat_box_ap
-        pix3d_metrics["box_ap@%.1f - %s" % (iou_thresh, cat_name)] = cat_box_ap
-
-        cat_mask_ap = VOCap.compute_ap(
-            torch.cat(mask_apscores[cat_id]), torch.cat(mask_aplabels[cat_id]), npos[cat_id]
-        )
-        maskap += cat_mask_ap
-        pix3d_metrics["mask_ap@%.1f - %s" % (iou_thresh, cat_name)] = cat_mask_ap
-
-        cat_mesh_ap = VOCap.compute_ap(
-            torch.cat(mesh_apscores[cat_id]), torch.cat(mesh_aplabels[cat_id]), npos[cat_id]
-        )
-        meshap += cat_mesh_ap
-        pix3d_metrics["mesh_ap@%.1f - %s" % (iou_thresh, cat_name)] = cat_mesh_ap
-
-    pix3d_metrics["box_ap@%.1f" % iou_thresh] = boxap / valid
-    pix3d_metrics["mask_ap@%.1f" % iou_thresh] = maskap / valid
-    pix3d_metrics["mesh_ap@%.1f" % iou_thresh] = meshap / valid
-
-    # print test ground truth
-    vis_utils.print_instances_class_histogram(
-        [npos[cat_id] for cat_id in cat_ids],  # number of instances
-        [dataset.loadCats([cat_id])[0]["name"] for cat_id in cat_ids],  # class names
-        pix3d_metrics,
-    )
-
-    return pix3d_metrics
-
-
-def evaluate_for_pix3d_with_camera(
-    predictions,
-    dataset,
-    metadata,
-    filter_iou,
-    mesh_models=None,
-    iou_thresh=0.5,
-    mask_thresh=0.5,
-    device=None,
-    vis_preds=False,
-):
-    from PIL import Image
-
-    if device is None:
-        device = torch.device("cpu")
-
-    F1_TARGET = "F1@0.300000"
-
-    # classes
-    cat_ids = sorted(dataset.getCatIds())
-    reverse_id_mapping = {v: k for k, v in metadata.thing_dataset_id_to_contiguous_id.items()}
-
-    # initialize tensors to record box & mask AP, number of gt positives
-    box_apscores, box_aplabels = {}, {}
-    mask_apscores, mask_aplabels = {}, {}
-    mesh_apscores, mesh_aplabels = {}, {}
-    npos = {}
-    for cat_id in cat_ids:
-        box_apscores[cat_id] = [torch.tensor([], dtype=torch.float32, device=device)]
-        box_aplabels[cat_id] = [torch.tensor([], dtype=torch.uint8, device=device)]
-        mask_apscores[cat_id] = [torch.tensor([], dtype=torch.float32, device=device)]
-        mask_aplabels[cat_id] = [torch.tensor([], dtype=torch.uint8, device=device)]
-        mesh_apscores[cat_id] = [torch.tensor([], dtype=torch.float32, device=device)]
-        mesh_aplabels[cat_id] = [torch.tensor([], dtype=torch.uint8, device=device)]
-        npos[cat_id] = 0.0
-    box_covered = []
-    mask_covered = []
-    mesh_covered = []
-
-    # number of gt positive instances per class
-    for gt_ann in dataset.dataset["annotations"]:
-        gt_label = gt_ann["category_id"]
-        # examples with imgfiles = {img/table/1749.jpg, img/table/0045.png}
-        # have a mismatch between images and masks. Thus, ignore
-        image_file_name = dataset.loadImgs([gt_ann["image_id"]])[0]["file_name"]
-        if image_file_name in ["img/table/1749.jpg", "img/table/0045.png"]:
-            continue
-        npos[gt_label] += 1.0
-
-    for prediction in predictions:
-
-        original_id = prediction["image_id"]
-        image_width = dataset.loadImgs([original_id])[0]["width"]
-        image_height = dataset.loadImgs([original_id])[0]["height"]
-        image_size = [image_height, image_width]
-        image_file_name = dataset.loadImgs([original_id])[0]["file_name"]
-        # examples with imgfiles = {img/table/1749.jpg, img/table/0045.png}
-        # have a mismatch between images and masks. Thus, ignore
-        if image_file_name in ["img/table/1749.jpg", "img/table/0045.png"]:
-            continue
-
-        if "instances" not in prediction:
-            continue
-
-        num_img_preds = len(prediction["instances"])
-        if num_img_preds == 0:
-            continue
-
-        # predictions
-        scores = prediction["instances"].scores
-        boxes = prediction["instances"].pred_boxes.to(device)
-        labels = prediction["instances"].pred_classes
-        masks_rles = prediction["instances"].pred_masks_rle
-        if hasattr(prediction["instances"], "pred_meshes"):
-            meshes = prediction["instances"].pred_meshes  # preditected meshes
-            verts = [mesh[0] for mesh in meshes]
-            faces = [mesh[1] for mesh in meshes]
-            meshes = Meshes(verts=verts, faces=faces).to(device)
-        else:
-            meshes = ico_sphere(4, device)
-            meshes = meshes.extend(num_img_preds).to(device)
-        if hasattr(prediction["instances"], "pred_dz"):
-            pred_dz = prediction["instances"].pred_dz
-            heights = boxes.tensor[:, 3] - boxes.tensor[:, 1]
-            # NOTE see appendix for derivation of pred dz
-            pred_dz = pred_dz[:, 0] * heights.cpu()
-        else:
-            raise ValueError("Z range of box not predicted")
-        assert prediction["instances"].image_size[0] == image_height
-        assert prediction["instances"].image_size[1] == image_width
-
-        # ground truth
-        # anotations corresponding to original_id (aka coco image_id)
-        gt_ann_ids = dataset.getAnnIds(imgIds=[original_id])
-        assert len(gt_ann_ids) == 1  # note that pix3d has one annotation per image
-        gt_anns = dataset.loadAnns(gt_ann_ids)[0]
-        assert gt_anns["image_id"] == original_id
-
-        # get original ground truth mask, box, label & mesh
-        maskfile = os.path.join(metadata.image_root, gt_anns["segmentation"])
-        gt_mask = torch.tensor(np.asarray(Image.open(maskfile), dtype=np.float32) / 255.0)
-        assert gt_mask.shape[0] == image_height and gt_mask.shape[1] == image_width
-
-        gt_mask = (gt_mask > 0).to(dtype=torch.uint8)  # binarize mask
-        gt_mask_rle = [mask_util.encode(np.array(gt_mask[:, :, None], order="F"))[0]]
-        gt_box = np.array(gt_anns["bbox"]).reshape(-1, 4)  # xywh from coco
-        gt_box = BoxMode.convert(gt_box, BoxMode.XYWH_ABS, BoxMode.XYXY_ABS)
-        gt_label = gt_anns["category_id"]
-        faux_gt_targets = Boxes(torch.tensor(gt_box, dtype=torch.float32, device=device))
-
-        # load gt mesh and extrinsics/intrinsics
-        gt_R = torch.tensor(gt_anns["rot_mat"]).to(device)
-        gt_t = torch.tensor(gt_anns["trans_mat"]).to(device)
-        gt_K = torch.tensor(gt_anns["K"]).to(device)
-        if mesh_models is not None:
-            modeltype = gt_anns["model"]
-            gt_verts, gt_faces = (
-                mesh_models[modeltype][0].clone(),
-                mesh_models[modeltype][1].clone(),
-            )
-            gt_verts = gt_verts.to(device)
-            gt_faces = gt_faces.to(device)
-        else:
-            # load from disc
-            raise NotImplementedError
-        gt_verts = shape_utils.transform_verts(gt_verts, gt_R, gt_t)
-        gt_zrange = torch.stack([gt_verts[:, 2].min(), gt_verts[:, 2].max()])
-        gt_mesh = Meshes(verts=[gt_verts], faces=[gt_faces])
-
-        # box iou
-        boxiou = pairwise_iou(boxes, faux_gt_targets)
-
-        # filter predictions with iou > filter_iou
-        valid_pred_ids = boxiou > filter_iou
-
-        # mask iou
-        miou = mask_util.iou(masks_rles, gt_mask_rle, [0])
-
-        # # gt zrange (zrange stores min_z and max_z)
-        # # zranges = torch.stack([gt_zrange] * len(meshes), dim=0)
-
-        # predicted zrange (= pred_dz)
-        assert hasattr(prediction["instances"], "pred_dz")
-        # It's impossible to predict the center location in Z (=tc)
-        # from the image. See appendix for more.
-        tc = (gt_zrange[1] + gt_zrange[0]) / 2.0
-        # Given a center location (tc) and a focal_length,
-        # pred_dz = pred_dz * box_h * tc / focal_length
-        # See appendix for more.
-        zranges = torch.stack(
-            [
-                torch.stack(
-                    [tc - tc * pred_dz[i] / 2.0 / gt_K[0], tc + tc * pred_dz[i] / 2.0 / gt_K[0]]
-                )
-                for i in range(len(meshes))
-            ],
-            dim=0,
-        )
-
-        gt_Ks = gt_K.view(1, 3).expand(len(meshes), 3)
-        meshes = transform_meshes_to_camera_coord_system(
-            meshes, boxes.tensor, zranges, gt_Ks, image_size
-        )
-
-        if vis_preds:
-            vis_utils.visualize_predictions(
-                original_id,
-                image_file_name,
-                scores,
-                labels,
-                boxes.tensor,
-                masks_rles,
-                meshes,
-                metadata,
-                "/tmp/output",
-            )
-
-        shape_metrics = compare_meshes(meshes, gt_mesh, reduce=False)
-
-        # sort predictions in descending order
-        scores_sorted, idx_sorted = torch.sort(scores, descending=True)
-
-        for pred_id in range(num_img_preds):
-            # remember we only evaluate the preds that have overlap more than
-            # iou_filter with the ground truth prediction
-            if valid_pred_ids[idx_sorted[pred_id], 0] == 0:
-                continue
             # map to dataset category id
             pred_label = reverse_id_mapping[labels[idx_sorted[pred_id]].item()]
             pred_miou = miou[idx_sorted[pred_id]].item()
@@ -643,6 +418,20 @@ def evaluate_for_pix3d_with_camera(
                 mask_covered.append(original_id)
             mask_apscores[pred_label].append(pred_score)
             mask_aplabels[pred_label].append(tpfp)
+
+            # occupancy IOU
+            # TODO new
+            pred_occ = occ[idx_sorted[pred_id]]
+            pred_occ = (pred_occ >= occ_iou_thresh).cpu().numpy()
+            gt_occ = (gt_occupancies >= 0.5)
+            iou = compute_iou(pred_occ, gt_occ[0:100])
+
+            # add to dict
+            pred_dict['pred_label'] = pred_label
+            pred_dict['pred_biou'] = pred_biou
+            pred_dict['pred_score'] = pred_score.cpu().numpy().tolist()
+            pred_dict['gt_label'] = gt_label
+            pred_dict['iou'] = float(iou)
 
             # box
             tpfp = torch.tensor([0], dtype=torch.uint8, device=device)
@@ -764,3 +553,32 @@ def load_unique_meshes(json_file, model_root):
         mesh = load_obj(os.path.join(model_root, model))
         object_models[model] = [mesh[0], mesh[1].verts_idx]
     return object_models
+
+
+def load_unique_points(json_file, model_root):
+    with open(json_file, "r") as f:
+        annotations = json.load(f)["annotations"]
+    # find unique models
+    unique_occupancies = []
+    for obj in annotations:
+        model_type = obj["points"]
+        if model_type not in unique_occupancies:
+            unique_occupancies.append(model_type)
+
+    # read unique occupancies
+    model_to_points = {}
+    for model in unique_occupancies:
+        points_dict = np.load(os.path.join(model_root, model))
+        points = points_dict['points'].astype(np.float32)
+        packed_occupancies = points_dict['occupancies']
+        # unpack bits
+        unpacked_occupancies = np.unpackbits(packed_occupancies)[:points.shape[0]]
+        occupancies = unpacked_occupancies.astype(np.float32)
+
+        model_points = {
+            None: points,
+            'occupancies': occupancies
+        }
+        model_to_points[model] = model_points
+
+    return model_to_points

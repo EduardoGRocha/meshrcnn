@@ -580,6 +580,22 @@ def transform_meshes_to_camera_coord_system(meshes, boxes, zranges, Ks, imsize):
     return Meshes(verts=new_verts, faces=new_faces)
 
 
+def load_unique_meshes(json_file, model_root):
+    with open(json_file, "r") as f:
+        anns = json.load(f)["annotations"]
+    # find unique models
+    unique_models = []
+    for obj in anns:
+        model_type = obj["model"]
+        if model_type not in unique_models:
+            unique_models.append(model_type)
+    # read unique models
+    object_models = {}
+    for model in unique_models:
+        mesh = load_obj(os.path.join(model_root, model))
+        object_models[model] = [mesh[0], mesh[1].verts_idx]
+    return object_models
+
 # TODO function repeated. Already present at occ_dataset_transforms
 def load_unique_pointclouds(json_file, model_root):
     with open(json_file, "r") as f:
