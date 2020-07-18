@@ -50,18 +50,6 @@ def occnet_rcnn_inference(pred_occnet_logits, pred_instances):
         instances.pred_occupancies = prob  # (1, D, H, W)
 
 
-def occnet_mesh_rcnn_inference(pred_occnet_meshes, pred_instances):
-    num_boxes_per_image = [len(i) for i in pred_instances]
-
-    mesh_iter = iter(pred_occnet_meshes)
-    meshes_per_image = [[next(mesh_iter) for _ in range(n)] for n in num_boxes_per_image]
-
-    # meshes_per_image = pred_occnet_meshes.split(num_boxes_per_image, dim=0)
-
-    for meshes, instances in zip(meshes_per_image, pred_instances):
-        instances.pred_meshes = meshes  # (1, D, H, W)
-
-
 is_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if is_cuda else "cpu")
 

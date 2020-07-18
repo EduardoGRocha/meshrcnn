@@ -28,7 +28,6 @@ from meshrcnn.modeling.roi_heads.occnet_head import (
     occnet_rcnn_loss,
     occnet_rcnn_inference,
     build_occ_head, occnet_rcnn_loss_kl,
-    occnet_mesh_rcnn_inference,
 )
 
 from meshrcnn.modeling.roi_heads.z_head import build_z_head, z_rcnn_inference, z_rcnn_loss

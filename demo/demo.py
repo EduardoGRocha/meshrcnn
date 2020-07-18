@@ -46,6 +46,10 @@ class VisualizationDemo(object):
         os.makedirs(output_dir, exist_ok=True)
         self.output_dir = output_dir
 
+        # TODO: get from config
+        self._has_camera_matrices = False
+        self._output_mask = cfg.MODEL.MASK_ON
+
     def run_on_image(self, image, focal_length=10.0):
         """
         Args:
@@ -72,30 +76,34 @@ class VisualizationDemo(object):
             scores = instances.scores
             boxes = instances.pred_boxes
             labels = instances.pred_classes
-            masks = instances.pred_masks
+            if self._output_mask:
+                masks = instances.pred_masks
+            else:
+                masks = None
             meshes = Meshes(
                 verts=[mesh[0] for mesh in instances.pred_meshes],
                 faces=[mesh[1] for mesh in instances.pred_meshes],
             )
-            pred_dz = instances.pred_dz[:, 0] * (boxes.tensor[:, 3] - boxes.tensor[:, 1])
-            tc = pred_dz.abs().max() + 1.0
-            zranges = torch.stack(
-                [
-                    torch.stack(
-                        [
-                            tc - tc * pred_dz[i] / 2.0 / focal_length,
-                            tc + tc * pred_dz[i] / 2.0 / focal_length,
-                        ]
-                    )
-                    for i in range(len(meshes))
-                ],
-                dim=0,
-            )
+            if self._has_camera_matrices:
+                pred_dz = instances.pred_dz[:, 0] * (boxes.tensor[:, 3] - boxes.tensor[:, 1])
+                tc = pred_dz.abs().max() + 1.0
+                zranges = torch.stack(
+                    [
+                        torch.stack(
+                            [
+                                tc - tc * pred_dz[i] / 2.0 / focal_length,
+                                tc + tc * pred_dz[i] / 2.0 / focal_length,
+                            ]
+                        )
+                        for i in range(len(meshes))
+                    ],
+                    dim=0,
+                )
 
-            Ks = torch.tensor(K).to(self.cpu_device).view(1, 3).expand(len(meshes), 3)
-            meshes = transform_meshes_to_camera_coord_system(
-                meshes, boxes.tensor, zranges, Ks, imsize
-            )
+                Ks = torch.tensor(K).to(self.cpu_device).view(1, 3).expand(len(meshes), 3)
+                meshes = transform_meshes_to_camera_coord_system(
+                    meshes, boxes.tensor, zranges, Ks, imsize
+                )
 
             if self.vis_highest_scoring:
                 det_ids = [scores.argmax().item()]
@@ -103,13 +111,17 @@ class VisualizationDemo(object):
                 det_ids = range(len(scores))
 
             for det_id in det_ids:
+                if self._output_mask:
+                    mask_det_id = masks[det_id]
+                else:
+                    mask_det_id = None
                 self.visualize_prediction(
                     det_id,
                     image,
                     boxes.tensor[det_id],
                     labels[det_id],
                     scores[det_id],
-                    masks[det_id],
+                    mask_det_id,
                     meshes[det_id],
                 )
 
@@ -128,9 +140,10 @@ class VisualizationDemo(object):
         composite = image.copy().astype(np.float32)
 
         # overlay mask
-        idx = mask.nonzero()
-        composite[idx[:, 0], idx[:, 1], :] *= 1.0 - alpha
-        composite[idx[:, 0], idx[:, 1], :] += alpha * mask_color
+        if self._output_mask:
+            idx = mask.nonzero()
+            composite[idx[:, 0], idx[:, 1], :] *= 1.0 - alpha
+            composite[idx[:, 0], idx[:, 1], :] += alpha * mask_color
 
         # overlay box
         (x0, y0, x1, y1) = (int(x + 0.5) for x in box)
