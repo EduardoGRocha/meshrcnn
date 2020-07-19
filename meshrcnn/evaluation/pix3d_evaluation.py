@@ -58,8 +58,10 @@ class Pix3DEvaluator(DatasetEvaluator):
         # TODO get it from config (?)
         self._occ_iou_thresh = 0.3
 
-        # TODO get from config
-        self._has_camera_matrices = False
+        if "occ" in dataset_name:
+            self._has_camera_matrices = False
+        else:
+            self._has_camera_matrices = True
         self._output_mask = cfg.MODEL.MASK_ON
 
         # load unique obj files
@@ -71,8 +73,12 @@ class Pix3DEvaluator(DatasetEvaluator):
         json_file = MetadataCatalog.get(dataset_name).json_file
         model_root = MetadataCatalog.get(dataset_name).image_root
         self._mesh_models = load_unique_meshes(json_file, model_root)
-        self._points_models = load_unique_points(json_file, model_root)
-        logger.info("Unique objects loaded: {}".format(len(self._points_models)))
+        logger.info("Unique objects loaded: {}".format(len(self._mesh_models)))
+
+        if cfg.MODEL.OCC_ON:
+            self._points_models = load_unique_points(json_file, model_root)
+        else:
+            self._points_models = None
 
     def reset(self):
         self._predictions = []
@@ -152,7 +158,8 @@ class Pix3DEvaluator(DatasetEvaluator):
         """
         Evaluate predictions.
         """
-        if "occ" in self._tasks and "bbox" in self._tasks:
+        # if "occ" in self._tasks and "bbox" in self._tasks:
+        if "segm" in self._tasks and "bbox" in self._tasks:
             results = evaluate_for_pix3d(
                 self._predictions,
                 self._coco_api,
@@ -180,7 +187,8 @@ class Pix3DEvaluator(DatasetEvaluator):
             # TODO: print mask too
             self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in results])))
             #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
-            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in results])))
+            if self._points_models:
+                self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in results])))
 
 
 def evaluate_for_pix3d(
@@ -260,7 +268,8 @@ def evaluate_for_pix3d(
         scores = prediction["instances"].scores
         boxes = prediction["instances"].pred_boxes.to(device)
         labels = prediction["instances"].pred_classes
-        occ = prediction["instances"].pred_occupancies
+        if points_models:
+            occ = prediction["instances"].pred_occupancies
 
         masks_rles = prediction["instances"].pred_masks_rle
 
@@ -420,18 +429,19 @@ def evaluate_for_pix3d(
             mask_aplabels[pred_label].append(tpfp)
 
             # occupancy IOU
-            # TODO new
-            pred_occ = occ[idx_sorted[pred_id]]
-            pred_occ = (pred_occ >= occ_iou_thresh).cpu().numpy()
-            gt_occ = (gt_occupancies >= 0.5)
-            iou = compute_iou(pred_occ, gt_occ[0:100])
+            if points_models:
+                pred_occ = occ[idx_sorted[pred_id]]
+                pred_occ = (pred_occ >= occ_iou_thresh).cpu().numpy()
+                gt_occ = (gt_occupancies >= 0.5)
+                iou = compute_iou(pred_occ, gt_occ[0:100])
 
             # add to dict
             pred_dict['pred_label'] = pred_label
             pred_dict['pred_biou'] = pred_biou
             pred_dict['pred_score'] = pred_score.cpu().numpy().tolist()
             pred_dict['gt_label'] = gt_label
-            pred_dict['iou'] = float(iou)
+            if points_models:
+                pred_dict['iou'] = float(iou)
 
             # box
             tpfp = torch.tensor([0], dtype=torch.uint8, device=device)
