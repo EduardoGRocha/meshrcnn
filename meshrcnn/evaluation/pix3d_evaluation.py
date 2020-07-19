@@ -23,6 +23,8 @@ from meshrcnn.utils import shape as shape_utils
 from meshrcnn.utils import vis as vis_utils
 from meshrcnn.utils.metrics import compare_meshes, compute_iou
 
+from pytorch3d.io import save_obj
+
 logger = logging.getLogger(__name__)
 
 
@@ -153,7 +155,7 @@ class Pix3DEvaluator(DatasetEvaluator):
         Evaluate predictions.
         """
         if "occ" in self._tasks and "bbox" in self._tasks:
-            results = evaluate_for_pix3d(
+            results, dict_list = evaluate_for_pix3d(
                 self._predictions,
                 self._coco_api,
                 self._metadata,
@@ -174,13 +176,14 @@ class Pix3DEvaluator(DatasetEvaluator):
 
             # Create pandas dataframe and save
             # TODO add output dir
-            # with open("output/evals.json", 'w') as out_file:
-            #     json.dump({"results": results}, out_file)
+            with open("output/evals.json", 'w') as out_file:
+                json.dump({"results": dict_list}, out_file)
 
             # TODO: print mask too
-            self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in results])))
+            self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in dict_list])))
             #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
-            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in results])))
+            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
+            self._logger.info("chamfer-l2 %.5f" % (np.mean([item['chamfer-l2'] for item in dict_list])))
 
 
 def evaluate_for_pix3d(
@@ -380,6 +383,15 @@ def evaluate_for_pix3d(
                 metadata,
                 "/tmp/output",
             )
+        path = '/home/daniel/ADL4CV/T'
+        save_file_gt = os.path.join(path, "gt.obj")
+        save_file_pred= os.path.join(path, "pred.obj")
+
+        verts, faces = gt_mesh.get_mesh_verts_faces(0)
+        save_obj(save_file_gt, verts, faces)
+
+        verts, faces = meshes.get_mesh_verts_faces(0)
+        save_obj(save_file_pred, verts, faces)
 
         shape_metrics = compare_meshes(meshes, gt_mesh, reduce=False)
 
@@ -394,7 +406,8 @@ def evaluate_for_pix3d(
 
             # TODO new
             pred_dict = {
-                "id, pred_id": (original_id, pred_id)
+                "id": original_id,
+                "pred_id": pred_id
             }
             dict_list.append(pred_dict)
 
@@ -429,9 +442,11 @@ def evaluate_for_pix3d(
             # add to dict
             pred_dict['pred_label'] = pred_label
             pred_dict['pred_biou'] = pred_biou
-            pred_dict['pred_score'] = pred_score.cpu().numpy().tolist()
+            pred_dict['pred_score'] = float(pred_score)
             pred_dict['gt_label'] = gt_label
             pred_dict['iou'] = float(iou)
+            pred_dict['chamfer-l2'] = float(shape_metrics['Chamfer-L2'][idx_sorted[pred_id]])
+            pred_dict['f1'] = pred_f1
 
             # box
             tpfp = torch.tensor([0], dtype=torch.uint8, device=device)
@@ -498,7 +513,7 @@ def evaluate_for_pix3d(
         pix3d_metrics,
     )
 
-    return pix3d_metrics
+    return pix3d_metrics, dict_list
 
 
 def transform_meshes_to_camera_coord_system(meshes, boxes, zranges, Ks, imsize):
