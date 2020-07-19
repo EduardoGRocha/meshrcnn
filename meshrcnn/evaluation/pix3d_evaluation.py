@@ -158,8 +158,8 @@ class Pix3DEvaluator(DatasetEvaluator):
         """
         Evaluate predictions.
         """
-        # if "occ" in self._tasks and "bbox" in self._tasks:
-        if "segm" in self._tasks and "bbox" in self._tasks:
+        if "occ" in self._tasks and "bbox" in self._tasks:
+        # if "segm" in self._tasks and "bbox" in self._tasks:
             results = evaluate_for_pix3d(
                 self._predictions,
                 self._coco_api,
@@ -169,7 +169,7 @@ class Pix3DEvaluator(DatasetEvaluator):
                 points_models=self._points_models,
                 occ_iou_thresh=self._occ_iou_thresh,
                 device=self._device,
-                vis_preds=True,
+                vis_preds=False,
                 has_camera_matrices=self._has_camera_matrices,
             )
 
