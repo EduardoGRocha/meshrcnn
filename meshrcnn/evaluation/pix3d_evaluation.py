@@ -158,9 +158,9 @@ class Pix3DEvaluator(DatasetEvaluator):
         """
         Evaluate predictions.
         """
-        if "occ" in self._tasks and "bbox" in self._tasks:
-        # if "segm" in self._tasks and "bbox" in self._tasks:
-            results = evaluate_for_pix3d(
+        # if "occ" in self._tasks and "bbox" in self._tasks:
+        if "segm" in self._tasks and "bbox" in self._tasks:
+            results, dict_list = evaluate_for_pix3d(
                 self._predictions,
                 self._coco_api,
                 self._metadata,
@@ -181,14 +181,16 @@ class Pix3DEvaluator(DatasetEvaluator):
 
             # Create pandas dataframe and save
             # TODO add output dir
-            # with open("output/evals.json", 'w') as out_file:
-            #     json.dump({"results": results}, out_file)
+            with open("output/evals.json", 'w') as out_file:
+                json.dump({"results": dict_list}, out_file)
 
             # TODO: print mask too
-            self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in results])))
+            self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in dict_list])))
             #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
+            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
+            self._logger.info("chamfer-l2 %.5f" % (np.mean([item['chamfer-l2'] for item in dict_list])))
             if self._points_models:
-                self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in results])))
+                self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
 
 
 def evaluate_for_pix3d(
@@ -403,7 +405,8 @@ def evaluate_for_pix3d(
 
             # TODO new
             pred_dict = {
-                "id, pred_id": (original_id, pred_id)
+                "id": original_id,
+                "pred_id": pred_id
             }
             dict_list.append(pred_dict)
 
@@ -438,8 +441,11 @@ def evaluate_for_pix3d(
             # add to dict
             pred_dict['pred_label'] = pred_label
             pred_dict['pred_biou'] = pred_biou
-            pred_dict['pred_score'] = pred_score.cpu().numpy().tolist()
+            pred_dict['pred_score'] = float(pred_score)
             pred_dict['gt_label'] = gt_label
+            pred_dict['iou'] = float(iou)
+            pred_dict['chamfer-l2'] = float(shape_metrics['Chamfer-L2'][idx_sorted[pred_id]])
+            pred_dict['f1'] = pred_f1
             if points_models:
                 pred_dict['iou'] = float(iou)
 
@@ -508,7 +514,7 @@ def evaluate_for_pix3d(
         pix3d_metrics,
     )
 
-    return pix3d_metrics
+    return pix3d_metrics, dict_list
 
 
 def transform_meshes_to_camera_coord_system(meshes, boxes, zranges, Ks, imsize):
