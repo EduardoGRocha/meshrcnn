@@ -4,10 +4,11 @@ MODEL:
     FREEZE_AT: 5
 #  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
   WEIGHTS: "meshrcnn://meshrcnn_R50.pth"
-  MASK_ON: False
+#  WEIGHTS: "output/model_final.pth"
+  MASK_ON: True
   VOXEL_ON: False
   MESH_ON: False
-  ZPRED_ON: False
+  ZPRED_ON: True
   OCC_ON: True
   RESNETS:
     DEPTH: 50
@@ -18,7 +19,7 @@ MODEL:
   ROI_HEADS:
     NAME: "MeshRCNNROIHeads"
     BATCH_SIZE_PER_IMAGE: 8
-    NUM_CLASSES: 1 # Number of foreground classes
+    NUM_CLASSES: 9 # Number of foreground classes
     IOU_THRESHOLDS: [0.2, 0.5]
     IOU_LABELS: [-1, 0, 1]
   ROI_BOX_HEAD:
@@ -76,8 +77,10 @@ DATASETS:
 #  TRAIN: ("shapenet_table_1",)
 #  TEST: ("shapenet_table_1",)
   # Train on smaller Test file to speed up stuff
-  TRAIN: ("pix3d_s1_occ_table_test",)
-  TEST: ("pix3d_s1_occ_table_train",)
+#  TRAIN: ("pix3d_s1_occ_table_test",)
+#  TEST: ("pix3d_s1_occ_table_train",)
+  TRAIN: ("pix3d_s1_occ_test_small",)
+  TEST: ("pix3d_s1_occ_test_small",)
 #  TEST: ("pix3d_s1_occ_bookcase_tool_train",)
 #  TRAIN: ("pix3d_s1_train_bookcase",)
 #  TEST: ("pix3d_s1_test_bookcase",)
@@ -89,10 +92,11 @@ SOLVER:
 #  WARMUP_ITERS: 1600
 #  BASE_LR: 0.001
   WEIGHT_DECAY: 0.0001
-  STEPS: (4500, 6000)
-  MAX_ITER: 7200
-  WARMUP_ITERS: 1000
+  STEPS: (7000, 12000)
+  MAX_ITER: 14400
+  WARMUP_ITERS: 1500
   WARMUP_FACTOR: 0.1
   IMS_PER_BATCH: 8
+  CHECKPOINT_PERIOD: 1000
 #TEST:
 #  EVAL_PERIOD: 250

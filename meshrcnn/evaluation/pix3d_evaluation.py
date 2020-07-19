@@ -23,8 +23,6 @@ from meshrcnn.utils import shape as shape_utils
 from meshrcnn.utils import vis as vis_utils
 from meshrcnn.utils.metrics import compare_meshes, compute_iou
 
-from pytorch3d.io import save_obj
-
 logger = logging.getLogger(__name__)
 
 
@@ -60,8 +58,10 @@ class Pix3DEvaluator(DatasetEvaluator):
         # TODO get it from config (?)
         self._occ_iou_thresh = 0.3
 
-        # TODO get from config
-        self._has_camera_matrices = False
+        if "shapenet" in dataset_name:
+            self._has_camera_matrices = False
+        else:
+            self._has_camera_matrices = True
         self._output_mask = cfg.MODEL.MASK_ON
 
         # load unique obj files
@@ -73,8 +73,12 @@ class Pix3DEvaluator(DatasetEvaluator):
         json_file = MetadataCatalog.get(dataset_name).json_file
         model_root = MetadataCatalog.get(dataset_name).image_root
         self._mesh_models = load_unique_meshes(json_file, model_root)
-        self._points_models = load_unique_points(json_file, model_root)
-        logger.info("Unique objects loaded: {}".format(len(self._points_models)))
+        logger.info("Unique objects loaded: {}".format(len(self._mesh_models)))
+
+        if cfg.MODEL.OCC_ON:
+            self._points_models = load_unique_points(json_file, model_root)
+        else:
+            self._points_models = None
 
     def reset(self):
         self._predictions = []
@@ -154,7 +158,8 @@ class Pix3DEvaluator(DatasetEvaluator):
         """
         Evaluate predictions.
         """
-        if "occ" in self._tasks and "bbox" in self._tasks:
+        # if "occ" in self._tasks and "bbox" in self._tasks:
+        if "segm" in self._tasks and "bbox" in self._tasks:
             results, dict_list = evaluate_for_pix3d(
                 self._predictions,
                 self._coco_api,
@@ -184,6 +189,8 @@ class Pix3DEvaluator(DatasetEvaluator):
             #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
             self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
             self._logger.info("chamfer-l2 %.5f" % (np.mean([item['chamfer-l2'] for item in dict_list])))
+            if self._points_models:
+                self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
 
 
 def evaluate_for_pix3d(
@@ -263,7 +270,8 @@ def evaluate_for_pix3d(
         scores = prediction["instances"].scores
         boxes = prediction["instances"].pred_boxes.to(device)
         labels = prediction["instances"].pred_classes
-        occ = prediction["instances"].pred_occupancies
+        if points_models:
+            occ = prediction["instances"].pred_occupancies
 
         masks_rles = prediction["instances"].pred_masks_rle
 
@@ -383,15 +391,6 @@ def evaluate_for_pix3d(
                 metadata,
                 "/tmp/output",
             )
-        path = '/home/daniel/ADL4CV/T'
-        save_file_gt = os.path.join(path, "gt.obj")
-        save_file_pred= os.path.join(path, "pred.obj")
-
-        verts, faces = gt_mesh.get_mesh_verts_faces(0)
-        save_obj(save_file_gt, verts, faces)
-
-        verts, faces = meshes.get_mesh_verts_faces(0)
-        save_obj(save_file_pred, verts, faces)
 
         shape_metrics = compare_meshes(meshes, gt_mesh, reduce=False)
 
@@ -433,11 +432,11 @@ def evaluate_for_pix3d(
             mask_aplabels[pred_label].append(tpfp)
 
             # occupancy IOU
-            # TODO new
-            pred_occ = occ[idx_sorted[pred_id]]
-            pred_occ = (pred_occ >= occ_iou_thresh).cpu().numpy()
-            gt_occ = (gt_occupancies >= 0.5)
-            iou = compute_iou(pred_occ, gt_occ[0:100])
+            if points_models:
+                pred_occ = occ[idx_sorted[pred_id]]
+                pred_occ = (pred_occ >= occ_iou_thresh).cpu().numpy()
+                gt_occ = (gt_occupancies >= 0.5)
+                iou = compute_iou(pred_occ, gt_occ[0:100])
 
             # add to dict
             pred_dict['pred_label'] = pred_label
@@ -447,6 +446,8 @@ def evaluate_for_pix3d(
             pred_dict['iou'] = float(iou)
             pred_dict['chamfer-l2'] = float(shape_metrics['Chamfer-L2'][idx_sorted[pred_id]])
             pred_dict['f1'] = pred_f1
+            if points_models:
+                pred_dict['iou'] = float(iou)
 
             # box
             tpfp = torch.tensor([0], dtype=torch.uint8, device=device)

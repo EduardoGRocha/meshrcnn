@@ -63,6 +63,8 @@ SHAPENET_SPLITS = {
     "pix3d_s1_occ_table_test": ("pix3d", "pix3d/pix3d_s1_occ_test_table.json"),
     "shapenet_table_1": ("ShapeNetTable1", "ShapeNetTable1/shapenet_tables.json"),
     "pix3d_s1_occ_table_train_1": ("pix3d", "pix3d/pix3d_s1_occ_train_table_1.json"),
+    "pix3d_s1_occ_train_reduced": ("pix3d", "pix3d/pix3d_s1_train_reduced.json"),
+    "pix3d_s1_occ_test_small": ("pix3d", "pix3d/pix3d_s1_occ_test_small.json"),
     # "pix3d_s1_occ_bookcase_tool_train": ("pix3d", "pix3d/pix3d_s1_occ_train_bookcase_tool.json"),
     # "pix3d_s1_occ_bookcase_tool_test": ("pix3d", "pix3d/pix3d_s1_occ_test_bookcase_tool.json"),
 }
@@ -115,10 +117,15 @@ def register_shapenet(dataset_name, json_file, image_root, root="datasets"):
         thing_classes = ["table"]
         thing_colors = [[245, 130, 48]]
         thing_dataset_id_to_contiguous_id = {1: 0}
-    else:
+    elif "phone" in dataset_name:
         thing_classes = ["telephone"]
         thing_colors = [[255, 255, 25]]
         thing_dataset_id_to_contiguous_id = {1: 0}
+    else:
+        things_ids = [k["id"] for k in get_pix3d_metadata()]
+        thing_classes = [k["name"] for k in get_pix3d_metadata()]
+        thing_colors = [k["color"] for k in get_pix3d_metadata()]
+        thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(things_ids)}
 
     json_file = os.path.join(root, json_file)
     image_root = os.path.join(root, image_root)
