@@ -169,7 +169,7 @@ class Pix3DEvaluator(DatasetEvaluator):
                 points_models=self._points_models,
                 occ_iou_thresh=self._occ_iou_thresh,
                 device=self._device,
-                vis_preds=True,
+                vis_preds=False,
                 has_camera_matrices=self._has_camera_matrices,
             )
 

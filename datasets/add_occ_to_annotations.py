@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
+import os
 
 POINTS_FILE_NAME = 'points.npz'
 POINTCLOUD_FILE_NAME = 'pointcloud.npz'
 
 # FILE_PATH = 'pix3d_occupancies/pix3d_s1_train_bookcase_tool.json'
-FILE_PATH = 'pix3d_occupancies/pix3d_s1_test_bookcase_tool.json'
+FILE_PATH = 'pix3d/pix3d_s1_test.json'
+OUT_PATH = 'pix3d/pix3d_s1_occ_test.json'
 
 with open(FILE_PATH, 'r') as in_file:
     data = json.load(in_file)
@@ -21,10 +23,11 @@ for annotation in annotations:
     annotation['points'] = points_path
     annotation['pointcloud'] = pointcloud_path
     
-    annotations_new.append(annotation)
+    if os.path.isfile('pix3d/' + annotation['points']):
+        annotations_new.append(annotation)
     
 data['annotations'] = annotations_new
 
-with open(FILE_PATH, 'w') as out_file:
+with open(OUT_PATH, 'w') as out_file:
     json.dump(data, out_file)
     
