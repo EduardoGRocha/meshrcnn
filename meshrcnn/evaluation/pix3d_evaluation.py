@@ -61,7 +61,7 @@ class Pix3DEvaluator(DatasetEvaluator):
         if "shapenet" in dataset_name:
             self._has_camera_matrices = False
         else:
-            self._has_camera_matrices = True
+            self._has_camera_matrices = False
         self._output_mask = cfg.MODEL.MASK_ON
 
         # load unique obj files
@@ -182,7 +182,7 @@ class Pix3DEvaluator(DatasetEvaluator):
             # Create pandas dataframe and save
             # TODO add output dir
             with open("output/evals.json", 'w') as out_file:
-                json.dump({"results": dict_list}, out_file)
+                json.dump({"dict-list": dict_list, "APs": [{k: float(v)} for k, v in results.items()]}, out_file)
 
             # TODO: print mask too
             self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in dict_list])))
@@ -403,7 +403,6 @@ def evaluate_for_pix3d(
             if valid_pred_ids[idx_sorted[pred_id], 0] == 0:
                 continue
 
-            # TODO new
             pred_dict = {
                 "id": original_id,
                 "pred_id": pred_id
@@ -443,11 +442,13 @@ def evaluate_for_pix3d(
             pred_dict['pred_biou'] = pred_biou
             pred_dict['pred_score'] = float(pred_score)
             pred_dict['gt_label'] = gt_label
-            pred_dict['iou'] = float(iou)
             pred_dict['chamfer-l2'] = float(shape_metrics['Chamfer-L2'][idx_sorted[pred_id]])
             pred_dict['f1'] = pred_f1
             if points_models:
-                pred_dict['iou'] = float(iou)
+                if np.isnan(iou):
+                    pred_dict['iou'] = 0
+                else:
+                    pred_dict['iou'] = float(iou)
 
             # box
             tpfp = torch.tensor([0], dtype=torch.uint8, device=device)
