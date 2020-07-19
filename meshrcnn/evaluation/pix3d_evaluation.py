@@ -58,7 +58,7 @@ class Pix3DEvaluator(DatasetEvaluator):
         # TODO get it from config (?)
         self._occ_iou_thresh = 0.3
 
-        if "occ" in dataset_name:
+        if "shapenet" in dataset_name:
             self._has_camera_matrices = False
         else:
             self._has_camera_matrices = True
