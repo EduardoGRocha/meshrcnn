@@ -61,7 +61,7 @@ class Pix3DEvaluator(DatasetEvaluator):
         if "shapenet" in dataset_name:
             self._has_camera_matrices = False
         else:
-            self._has_camera_matrices = True
+            self._has_camera_matrices = False
         self._output_mask = cfg.MODEL.MASK_ON
 
         # load unique obj files
@@ -182,7 +182,7 @@ class Pix3DEvaluator(DatasetEvaluator):
             # Create pandas dataframe and save
             # TODO add output dir
             with open("output/evals.json", 'w') as out_file:
-                json.dump({"results": dict_list}, out_file)
+                json.dump({"results": dict_list, "APs": [{k:float(v)} for k,v in results.items()]}, out_file)
 
             # TODO: print mask too
             self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in dict_list])))
