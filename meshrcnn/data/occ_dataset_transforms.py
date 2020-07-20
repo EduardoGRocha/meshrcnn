@@ -375,8 +375,8 @@ class OccDatasetMapper:
         return verts, faces
 
     # def _process_pointcloud(self, pointcloud, transforms, R=None, t=None):
-        Pointclouds probably don't need any extra transformation
-        # return pointcloud
+    #     Pointclouds probably don't need any extra transformation
+    #     return pointcloud
 
     def _process_points(self, points, transforms, R=None, t=None):
         # Points probably don't need any extra transformation
