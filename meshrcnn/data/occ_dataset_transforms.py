@@ -63,9 +63,9 @@ def annotations_to_instances(annotations, image_size):
         dz = [obj["dz"] for obj in annotations]
         target.gt_dz = torch.tensor(dz)
 
-    if len(annotations) and "pointcloud" in annotations[0]:
-        pointcloud = [obj["pointcloud"] for obj in annotations]
-        target.gt_pointcloud = torch.tensor(pointcloud)
+    # if len(annotations) and "pointcloud" in annotations[0]:
+    #     pointcloud = [obj["pointcloud"] for obj in annotations]
+    #     target.gt_pointcloud = torch.tensor(pointcloud)
 
     if len(annotations) and "points" in annotations[0]:
         points = [obj["points"] for obj in annotations]
@@ -125,20 +125,20 @@ class OccDatasetMapper:
             all_mesh_models.update(dataset_mesh_models)
             logger.info("Unique objects loaded: {}".format(len(dataset_mesh_models)))
 
-        all_pointcloud_models = {}
+        # all_pointcloud_models = {}
         all_points_models = {}
         for dataset_name in dataset_names:
             json_file = MetadataCatalog.get(dataset_name).json_file
             model_root = MetadataCatalog.get(dataset_name).image_root
             logger.info("Loading models from {}...".format(dataset_name))
-            dataset_pointcloud_models = load_unique_pointclouds(json_file, model_root)
+            # dataset_pointcloud_models = load_unique_pointclouds(json_file, model_root)
             dataset_points_models = load_unique_points(json_file, model_root)
-            all_pointcloud_models.update(dataset_pointcloud_models)
+            # all_pointcloud_models.update(dataset_pointcloud_models)
             all_points_models.update(dataset_points_models)
-            logger.info("Unique objects loaded: {}".format(len(dataset_pointcloud_models)))
+            logger.info("Unique objects loaded: {}".format(len(dataset_points_models)))
 
         self._all_mesh_models = all_mesh_models
-        self._all_pointcloud_models = all_pointcloud_models
+        # self._all_pointcloud_models = all_pointcloud_models
         self._all_points_models = all_points_models
 
     def __call__(self, dataset_dict):
@@ -156,15 +156,15 @@ class OccDatasetMapper:
                 3. Prepare the annotations to :class:`Instances`
         """
         # get 3D models for each annotations and remove 3D mesh models from image dict
-        pointcloud_models = []
-        pointcloud_models_name = []
+        # pointcloud_models = []
+        # pointcloud_models_name = []
         points_models = []
         occupancies_models = []
         if "annotations" in dataset_dict:
             for annotation in dataset_dict["annotations"]:
-                pointcloud_dict = self._all_pointcloud_models[annotation["pointcloud"]][None]
-                pointcloud_models.append([(pointcloud_dict).copy()])
-                pointcloud_models_name.append(annotation["pointcloud"])
+                # pointcloud_dict = self._all_pointcloud_models[annotation["pointcloud"]][None]
+                # pointcloud_models.append([(pointcloud_dict).copy()])
+                # pointcloud_models_name.append(annotation["pointcloud"])
                 points_dict = self._all_points_models[annotation["points"]][None]
                 points_models.append([(points_dict).copy()])
                 occupancies_dict = self._all_points_models[annotation["points"]]["occupancies"]
@@ -186,8 +186,8 @@ class OccDatasetMapper:
         if "annotations" in dataset_dict:
             for i, annotation in enumerate(dataset_dict["annotations"]):
                 # For checking the name of the image later on
-                annotation["pointcloud_name"] = pointcloud_models_name[i]
-                annotation["pointcloud"] = pointcloud_models[i]
+                # annotation["pointcloud_name"] = pointcloud_models_name[i]
+                # annotation["pointcloud"] = pointcloud_models[i]
                 annotation["points"] = points_models[i]
                 annotation["occupancies"] = occupancies_models[i]
                 annotation["mesh"] = mesh_models[i]
@@ -277,12 +277,12 @@ class OccDatasetMapper:
         else:
             annotation.pop("mesh", None)
 
-        if self.occ_on and "pointcloud" in annotation:
-            annotation["pointcloud"] = self._process_pointcloud(
-                annotation["pointcloud"], transforms, R=annotation["R"], t=annotation["t"]
-            )
-        else:
-            annotation.pop("pointcloud", None)
+        # if self.occ_on and "pointcloud" in annotation:
+        #     annotation["pointcloud"] = self._process_pointcloud(
+        #         annotation["pointcloud"], transforms, R=annotation["R"], t=annotation["t"]
+        #     )
+        # else:
+        #     annotation.pop("pointcloud", None)
 
         if self.occ_on and "points" in annotation:
             annotation["points"] = self._process_points(
@@ -374,9 +374,9 @@ class OccDatasetMapper:
                 raise ValueError("Transform {} not recognized".format(t))
         return verts, faces
 
-    def _process_pointcloud(self, pointcloud, transforms, R=None, t=None):
-        # Pointclouds probably don't need any extra transformation
-        return pointcloud
+    # def _process_pointcloud(self, pointcloud, transforms, R=None, t=None):
+        Pointclouds probably don't need any extra transformation
+        # return pointcloud
 
     def _process_points(self, points, transforms, R=None, t=None):
         # Points probably don't need any extra transformation
@@ -404,27 +404,27 @@ def load_unique_meshes(json_file, model_root):
     return object_models
 
 
-def load_unique_pointclouds(json_file, model_root):
-    with open(json_file, "r") as f:
-        annotations = json.load(f)["annotations"]
-    # find unique models
-    unique_occupancies = []
-    for obj in annotations:
-        model_type = obj["pointcloud"]
-        if model_type not in unique_occupancies:
-            unique_occupancies.append(model_type)
-
-    # read unique occupancies
-    object_pointclouds = {}
-    for model in unique_occupancies:
-        pointcloud_dict = np.load(os.path.join(model_root,  model))
-        occupancy = {
-            None: pointcloud_dict['points'].astype(np.float32),
-            'normals': pointcloud_dict['normals'].astype(np.float32)
-        }
-        object_pointclouds[model] = occupancy
-
-    return object_pointclouds
+# def load_unique_pointclouds(json_file, model_root):
+#     with open(json_file, "r") as f:
+#         annotations = json.load(f)["annotations"]
+#     # find unique models
+#     unique_occupancies = []
+#     for obj in annotations:
+#         model_type = obj["pointcloud"]
+#         if model_type not in unique_occupancies:
+#             unique_occupancies.append(model_type)
+#
+#     # read unique occupancies
+#     object_pointclouds = {}
+#     for model in unique_occupancies:
+#         pointcloud_dict = np.load(os.path.join(model_root,  model))
+#         occupancy = {
+#             None: pointcloud_dict['points'].astype(np.float32),
+#             'normals': pointcloud_dict['normals'].astype(np.float32)
+#         }
+#         object_pointclouds[model] = occupancy
+#
+#     return object_pointclouds
 
 
 def load_unique_points(json_file, model_root):
