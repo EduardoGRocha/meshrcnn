@@ -81,21 +81,20 @@ class Trainer(DefaultTrainer):
                 )
         return results
 
-    def build_hooks(self):
-        hooks = super().build_hooks()
-        hooks.insert(-1, LossEvalHook(
-            self.cfg.TEST.EVAL_PERIOD,
-            # 1,
-            self.model,
-            build_detection_test_loader(
-                self.cfg,
-                self.cfg.DATASETS.TEST[0],
-                OccDatasetMapper(
-                    self.cfg, True,
-                    dataset_names=self.cfg.DATASETS.TEST)
-            )
-        ))
-        return hooks
+    # def build_hooks(self):
+    #     hooks = super().build_hooks()
+    #     hooks.insert(-1, LossEvalHook(
+    #         self.cfg.TEST.EVAL_PERIOD,
+    #         self.model,
+    #         build_detection_test_loader(
+    #             self.cfg,
+    #             self.cfg.DATASETS.TEST[0],
+    #             OccDatasetMapper(
+    #                 self.cfg, True,
+    #                 dataset_names=self.cfg.DATASETS.TEST)
+    #         )
+    #     ))
+    #     return hooks
 
 
 def setup(args):

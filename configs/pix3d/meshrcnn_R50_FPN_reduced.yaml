@@ -72,6 +72,8 @@ SOLVER:
   WARMUP_ITERS: 4000
   WARMUP_FACTOR: 0.1
   IMS_PER_BATCH: 8
-  CHECKPOINT_PERIOD: 1000
+  # Checkpoint every 5000 iterations, a bit less than 1.5h
+  CHECKPOINT_PERIOD: 5000
 #TEST:
-#  EVAL_PERIOD: 250
+#  # Approximately 1 epoch
+#  EVAL_PERIOD: 1000
