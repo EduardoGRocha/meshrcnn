@@ -474,8 +474,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
             pred_boxes = [x.pred_boxes for x in instances]
             gt_boxes = [target._fields['gt_boxes'] for target in targets]
             filter = [np.where(torch.squeeze(pairwise_iou(pred, gt)).cpu().numpy() > threshold)[0] for pred,gt in zip(pred_boxes, gt_boxes)]
-
-            pred_boxes = [pred[ids] for pred,ids in zip(pred_boxes, filter)]
+            pred_boxes = [pred[ids] if len(pred[ids]) > 0 else pred[[0]] for pred, ids in zip(pred_boxes, filter)]
             instances = [instance[ids] for instance, ids in zip(instances, filter)]
         else:
             pred_boxes = [x.pred_boxes for x in instances]

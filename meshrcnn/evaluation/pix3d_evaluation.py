@@ -270,7 +270,7 @@ def evaluate_for_pix3d(
         scores = prediction["instances"].scores
         boxes = prediction["instances"].pred_boxes.to(device)
         labels = prediction["instances"].pred_classes
-        if points_models:
+        if points_models and hasattr(prediction["instances"], "pred_occupancies"):
             occ = prediction["instances"].pred_occupancies
 
         masks_rles = prediction["instances"].pred_masks_rle
@@ -432,7 +432,7 @@ def evaluate_for_pix3d(
             mask_aplabels[pred_label].append(tpfp)
 
             # occupancy IOU
-            if points_models:
+            if points_models and hasattr(prediction["instances"], "pred_occupancies"):
                 pred_occ = occ[idx_sorted[pred_id]]
                 pred_occ = (pred_occ >= occ_iou_thresh).cpu().numpy()
                 gt_occ = (gt_occupancies >= 0.5)
@@ -443,10 +443,9 @@ def evaluate_for_pix3d(
             pred_dict['pred_biou'] = pred_biou
             pred_dict['pred_score'] = float(pred_score)
             pred_dict['gt_label'] = gt_label
-            pred_dict['iou'] = float(iou)
             pred_dict['chamfer-l2'] = float(shape_metrics['Chamfer-L2'][idx_sorted[pred_id]])
             pred_dict['f1'] = pred_f1
-            if points_models:
+            if points_models and hasattr(prediction["instances"], "pred_occupancies"):
                 pred_dict['iou'] = float(iou)
 
             # box
