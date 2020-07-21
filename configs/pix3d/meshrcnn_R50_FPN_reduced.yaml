@@ -79,8 +79,8 @@ DATASETS:
   # Train on smaller Test file to speed up stuff
 #  TRAIN: ("pix3d_s1_occ_table_test",)
 #  TEST: ("pix3d_s1_occ_table_train",)
-  TRAIN: ("pix3d_s1_occ_test_small",)
-  TEST: ("pix3d_s1_occ_test_small",)
+  TRAIN: ("pix3d_s1_occ_train",)
+  TEST: ("pix3d_s1_occ_test",)
 #  TEST: ("pix3d_s1_occ_bookcase_tool_train",)
 #  TRAIN: ("pix3d_s1_train_bookcase",)
 #  TEST: ("pix3d_s1_test_bookcase",)
