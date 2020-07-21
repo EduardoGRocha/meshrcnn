@@ -4,7 +4,6 @@ MODEL:
     FREEZE_AT: 5
 #  WEIGHTS: "meshrcnn://coco_init_0719.pth" # "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
   WEIGHTS: "meshrcnn://meshrcnn_R50.pth"
-#  WEIGHTS: "output/model_final.pth"
   MASK_ON: True
   VOXEL_ON: False
   MESH_ON: False
@@ -58,43 +57,19 @@ MODEL:
     NAME: "OccNetRCNNHead"
     POOLER_RESOLUTION: 14
     POOLER_SAMPLING_RATIO: 2
-    LOSS_WEIGHT: 5.0
+    LOSS_WEIGHT: 10.0
     CLS_AGNOSTIC_OCCUPANCY: True
-    SAMPLED_POINTS_PER_ITERATION: 4096
-#    TOTAL_OCCUPANCIES_SIZE: 200000
-    TOTAL_OCCUPANCIES_SIZE: 100000
+    SAMPLED_POINTS_PER_ITERATION: 8192
+    TOTAL_OCCUPANCIES_SIZE: 200000
 DATASETS:
-#  TRAIN: ("shapenet_phones_train",)
-#  TEST: ("shapenet_phones_train",)
-#  TEST: ("shapenet_phones_test",)
-#  TEST: ("shapenet_phones", )
-#  TRAIN: ("shapenet_phones",)
-#  TEST: ("shapenet_phones",)
-#  TRAIN: ("pix3d_s1_occ_bookcase_tool_train",)
-#  TEST: ("pix3d_s1_occ_bookcase_tool_test",)
-#  TRAIN: ("pix3d_s1_occ_table_train_1",)
-#  TEST: ("pix3d_s1_occ_table_train_1",)
-#  TRAIN: ("shapenet_table_1",)
-#  TEST: ("shapenet_table_1",)
-  # Train on smaller Test file to speed up stuff
-#  TRAIN: ("pix3d_s1_occ_table_test",)
-#  TEST: ("pix3d_s1_occ_table_train",)
   TRAIN: ("pix3d_s1_occ_train",)
   TEST: ("pix3d_s1_occ_test",)
-#  TEST: ("pix3d_s1_occ_bookcase_tool_train",)
-#  TRAIN: ("pix3d_s1_train_bookcase",)
-#  TEST: ("pix3d_s1_test_bookcase",)
 SOLVER:
   BASE_LR: 0.01
-#  WEIGHT_DECAY: 0.0001
-#  STEPS: (12800, 16000)
-#  MAX_ITER: 16800
-#  WARMUP_ITERS: 1600
-#  BASE_LR: 0.001
   WEIGHT_DECAY: 0.0001
-  STEPS: (7000, 12000)
-  MAX_ITER: 14400
-  WARMUP_ITERS: 1500
+  STEPS: (35000, 55000, 65000)
+  MAX_ITER: 70000
+  WARMUP_ITERS: 4000
   WARMUP_FACTOR: 0.1
   IMS_PER_BATCH: 8
   CHECKPOINT_PERIOD: 1000

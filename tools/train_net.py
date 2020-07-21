@@ -40,9 +40,6 @@ class Trainer(DefaultTrainer):
             return build_detection_test_loader(
                 cfg, dataset_name, mapper=OccDatasetMapper(cfg, False, dataset_names=(dataset_name,))
             )
-            # return build_detection_test_loader(
-            #     cfg, dataset_name, mapper=MeshRCNNMapper(cfg, False, dataset_names=(dataset_name,))
-            # )
         else:
             return build_detection_test_loader(
                 cfg, dataset_name, mapper=MeshRCNNMapper(cfg, False, dataset_names=(dataset_name,))
@@ -55,9 +52,6 @@ class Trainer(DefaultTrainer):
             return build_detection_train_loader(
                 cfg, mapper=OccDatasetMapper(cfg, True, dataset_names=dataset_names)
             )
-            # return build_detection_train_loader(
-            #     cfg, mapper=MeshRCNNMapper(cfg, True, dataset_names=dataset_names)
-            # )
         else:
             return build_detection_train_loader(
                 cfg, mapper=MeshRCNNMapper(cfg, True, dataset_names=dataset_names)
