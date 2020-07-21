@@ -187,10 +187,9 @@ class Pix3DEvaluator(DatasetEvaluator):
             # TODO: print mask too
             self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in dict_list])))
             #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
-            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
             self._logger.info("chamfer-l2 %.5f" % (np.mean([item['chamfer-l2'] for item in dict_list])))
             if self._points_models:
-                self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
+                self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list if 'iou' in item])))
 
 
 def evaluate_for_pix3d(
