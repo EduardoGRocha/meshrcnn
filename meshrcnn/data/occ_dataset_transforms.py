@@ -352,6 +352,11 @@ class OccDatasetMapper:
 
     def _process_points(self, points, transforms, R=None, t=None):
         # Points probably don't need any extra transformation
+        if R is not None:
+            assert R.dim() == 2
+            assert R.size(0) == 3 and R.size(1) == 3
+            points = points@R.numpy().T
+
         return points
 
     def _process_occupancies(self, occupancies, transforms, R=None, t=None):
