@@ -470,7 +470,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
         # filter bboxes by iou to accelerate evaluation
         if targets is not None:
-            threshold = 0.5
+            threshold = 0.3
             pred_boxes = [x.pred_boxes for x in instances]
             gt_boxes = [target._fields['gt_boxes'] for target in targets]
             filter = [np.where(torch.squeeze(pairwise_iou(pred, gt)).cpu().numpy() > threshold)[0] for pred,gt in zip(pred_boxes, gt_boxes)]
