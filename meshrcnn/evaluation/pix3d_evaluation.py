@@ -61,7 +61,7 @@ class Pix3DEvaluator(DatasetEvaluator):
         if "shapenet" in dataset_name:
             self._has_camera_matrices = False
         else:
-            self._has_camera_matrices = True
+            self._has_camera_matrices = False
         self._output_mask = cfg.MODEL.MASK_ON
 
         # load unique obj files
@@ -177,20 +177,19 @@ class Pix3DEvaluator(DatasetEvaluator):
             self._logger.info("Box AP %.5f" % (results["box_ap@%.1f" % 0.5]))
             self._logger.info("Mask AP %.5f" % (results["mask_ap@%.1f" % 0.5]))
             self._logger.info("Mesh AP %.5f" % (results["mesh_ap@%.1f" % 0.5]))
-            self._results["shape"] = results
+            #self._results["shape"] = results
 
             # Create pandas dataframe and save
             # TODO add output dir
             with open("output/evals.json", 'w') as out_file:
-                json.dump({"results": dict_list}, out_file)
+                json.dump({"results": dict_list, "APs": [{k:float(v)} for k,v in results.items()]}, out_file)
 
             # TODO: print mask too
-            self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in dict_list])))
+            #self._logger.info("Box IOU %.5f" % (np.mean([item['pred_biou'] for item in dict_list])))
             #self._logger.info("Mask AP %.5f" % (np.mean([item['pred_biou'] for item in results])))
-            self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
-            self._logger.info("chamfer-l2 %.5f" % (np.mean([item['chamfer-l2'] for item in dict_list])))
-            if self._points_models:
-                self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list])))
+            #self._logger.info("chamfer-l2 %.5f" % (np.mean([item['chamfer-l2'] for item in dict_list])))
+            #if self._points_models:
+            #    self._logger.info("Occ IOU %.5f" % (np.mean([item['iou'] for item in dict_list if 'iou' in item])))
 
 
 def evaluate_for_pix3d(
@@ -270,7 +269,7 @@ def evaluate_for_pix3d(
         scores = prediction["instances"].scores
         boxes = prediction["instances"].pred_boxes.to(device)
         labels = prediction["instances"].pred_classes
-        if points_models:
+        if points_models and hasattr(prediction["instances"], "pred_occupancies"):
             occ = prediction["instances"].pred_occupancies
 
         masks_rles = prediction["instances"].pred_masks_rle
@@ -432,7 +431,7 @@ def evaluate_for_pix3d(
             mask_aplabels[pred_label].append(tpfp)
 
             # occupancy IOU
-            if points_models:
+            if points_models and hasattr(prediction["instances"], "pred_occupancies"):
                 pred_occ = occ[idx_sorted[pred_id]]
                 pred_occ = (pred_occ >= occ_iou_thresh).cpu().numpy()
                 gt_occ = (gt_occupancies >= 0.5)
@@ -443,10 +442,10 @@ def evaluate_for_pix3d(
             pred_dict['pred_biou'] = pred_biou
             pred_dict['pred_score'] = float(pred_score)
             pred_dict['gt_label'] = gt_label
-            pred_dict['iou'] = float(iou)
-            pred_dict['chamfer-l2'] = float(shape_metrics['Chamfer-L2'][idx_sorted[pred_id]])
+            pred_dict['chamfer-l2'] = shape_metrics['Chamfer-L2'][idx_sorted[pred_id]].item()
+            pred_dict['normal_consistency'] = shape_metrics['NormalConsistency'][idx_sorted[pred_id]].item()
             pred_dict['f1'] = pred_f1
-            if points_models:
+            if points_models and hasattr(prediction["instances"], "pred_occupancies"):
                 pred_dict['iou'] = float(iou)
 
             # box

@@ -10,6 +10,7 @@ from detectron2.modeling.roi_heads.roi_heads import StandardROIHeads, select_for
 from pytorch3d.ops import cubify
 from pytorch3d.structures import Meshes
 from pytorch3d.utils import ico_sphere
+from detectron2.structures import pairwise_iou
 
 
 from meshrcnn.modeling.roi_heads.mask_head import mask_rcnn_loss
@@ -466,8 +467,18 @@ class MeshRCNNROIHeads(StandardROIHeads):
 
     def _forward_occupancy_head_not_training(self, features, instances, targets):
         # TODO: change to all boxes (not possible due to gpu constraints)
-        # pred_boxes = [x.pred_boxes for x in instances]
-        pred_boxes = [x.pred_boxes for x in instances]
+
+        # filter bboxes by iou to accelerate evaluation
+        if targets is not None:
+            threshold = 0.3
+            pred_boxes = [x.pred_boxes for x in instances]
+            gt_boxes = [target._fields['gt_boxes'] for target in targets]
+            filter = [np.where(torch.squeeze(pairwise_iou(pred, gt)).cpu().numpy() > threshold)[0] for pred,gt in zip(pred_boxes, gt_boxes)]
+            pred_boxes = [pred[ids] if len(pred[ids]) > 0 else pred[[0]] for pred, ids in zip(pred_boxes, filter)]
+            instances = [instance[ids] for instance, ids in zip(instances, filter)]
+        else:
+            pred_boxes = [x.pred_boxes for x in instances]
+
         occ_features = self.occ_pooler(features, pred_boxes)
         # INFER MESHES
         # can be done anyways but takes long
@@ -499,6 +510,7 @@ class MeshRCNNROIHeads(StandardROIHeads):
                 faces=[torch.as_tensor(mesh.faces, device=occ_features.device) for mesh in meshes])
             # append generated meshes to instances
             mesh_rcnn_inference(meshes_pyt3d, instances)
+
         if targets is not None:
             # read gt_points  and occupancies for each image
             points = [x._fields['gt_points'] for x in targets]
